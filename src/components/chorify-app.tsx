@@ -8,6 +8,7 @@ import { AuthPage } from "@/components/auth-page";
 import { InvitePage } from "@/components/invite-page";
 import { ProjectsPage } from "@/components/projects-page";
 import { TeamManagement } from "@/components/team-management";
+import { ApiKeyPage } from "@/components/api-key-page";
 import {
   Activity, AlertTriangle, Bell, Bug, ChevronDown,
   ClipboardCheck, Folder,
@@ -130,5 +131,5 @@ export function ChorifyApp({ route, user, nextPath = "" }: { route: string; user
   const [open,setOpen]=useState(false); if(route==="login" || route==="register") return <AuthPage page={route} nextPath={nextPath}/>;
   if(route.startsWith("invite/")) return <InvitePage token={route.slice(7)}/>;
   const [rootRoute,detailId]=route.split("/");
-  return <div className="min-h-screen bg-[#f4f7fb] text-[#17223b]"><Sidebar route={route} open={open} onClose={()=>setOpen(false)} user={user}/><div className="lg:pl-[248px]"><Header route={route} onMenu={()=>setOpen(true)}/><main className="mx-auto max-w-[1480px] p-5 md:p-8">{route==="dashboard"?<Dashboard/>:rootRoute==="teams"?<TeamManagement teamId={detailId}/>:rootRoute==="projects"?<ProjectsPage/>:<GenericPage route={rootRoute}/>}</main></div></div>;
+  return <div className="min-h-screen bg-[#f4f7fb] text-[#17223b]"><Sidebar route={route} open={open} onClose={()=>setOpen(false)} user={user}/><div className="lg:pl-[248px]"><Header route={route} onMenu={()=>setOpen(true)}/><main className="mx-auto max-w-[1480px] p-5 md:p-8">{route==="dashboard"?<Dashboard/>:rootRoute==="teams"?<TeamManagement teamId={detailId}/>:rootRoute==="projects"?<ProjectsPage/>:rootRoute==="keys"?<ApiKeyPage/>:<GenericPage route={rootRoute}/>}</main></div></div>;
 }
