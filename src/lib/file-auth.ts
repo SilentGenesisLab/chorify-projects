@@ -1,10 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { authenticatedUserId } from "@/lib/web-auth";
+import { statfs } from "node:fs/promises";
 
-export const MAX_FILE_SIZE = BigInt(2 * 1024 * 1024 * 1024);
-export const STORAGE_LIMIT = BigInt(10 * 1024 * 1024 * 1024);
-export const STORAGE_WARNING = BigInt(8 * 1024 * 1024 * 1024);
-export const STORAGE_UPLOAD_STOP = BigInt(Math.floor(9.5 * 1024 * 1024 * 1024));
+export { MAX_FILE_SIZE, STORAGE_LIMIT, STORAGE_WARNING, STORAGE_UPLOAD_STOP, folderMoveCreatesCycle, uploadFitsQuota } from "@/lib/file-rules";
 
 export async function fileUser(request: Request) {
   const userId = await authenticatedUserId(request);
@@ -25,7 +23,6 @@ export async function storageUsage() {
   const aggregate = await prisma.fileVersion.aggregate({ _sum: { size: true }, where: { file: { deletedAt: null } } });
   return aggregate._sum.size || BigInt(0);
 }
+export async function hostDiskAllowsUpload() { const path = process.env.STORAGE_CAPACITY_PATH; if (!path) return true; try { const stats = await statfs(path, { bigint: true }); return stats.bavail * stats.bsize >= BigInt(10 * 1024 * 1024 * 1024); } catch { return false; } }
 
 export function jsonBigInt(value: bigint) { return Number(value); }
-export function folderMoveCreatesCycle(folderId: string, folderPath: string, parent: { id: string; path: string } | null) { return Boolean(parent && (parent.id === folderId || parent.path.startsWith(`${folderPath}/`))); }
-export function uploadFitsQuota(used: bigint, incoming: bigint) { return incoming > BigInt(0) && incoming <= MAX_FILE_SIZE && used + incoming <= STORAGE_UPLOAD_STOP; }

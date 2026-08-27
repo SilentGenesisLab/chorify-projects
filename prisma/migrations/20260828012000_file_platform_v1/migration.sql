@@ -58,3 +58,18 @@ ALTER TABLE "FileUploadSession" ADD CONSTRAINT "FileUploadSession_userId_fkey" F
 ALTER TABLE "FileShare" ADD CONSTRAINT "FileShare_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "FileShare" ADD CONSTRAINT "FileShare_fileId_fkey" FOREIGN KEY ("fileId") REFERENCES "FileAsset"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "FileShare" ADD CONSTRAINT "FileShare_creatorId_fkey" FOREIGN KEY ("creatorId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- Preserve legacy object-backed records as version 1. Metadata-only demo rows remain without a version.
+INSERT INTO "FileVersion" ("id", "fileId", "version", "objectKey", "originalName", "mimeType", "size", "uploaderId")
+SELECT 'legacy_' || md5(f."id" || clock_timestamp()::text), f."id", 1, f."storageKey", f."name", f."mimeType", f."size", owner."userId"
+FROM "FileAsset" f
+JOIN LATERAL (
+  SELECT pm."userId" FROM "ProjectMember" pm
+  WHERE pm."projectId" = f."projectId"
+  ORDER BY CASE pm."role" WHEN 'OWNER' THEN 0 WHEN 'MANAGER' THEN 1 ELSE 2 END
+  LIMIT 1
+) owner ON true
+WHERE f."storageKey" IS NOT NULL;
+
+UPDATE "FileAsset" f SET "currentVersionId" = v."id", "creatorId" = v."uploaderId"
+FROM "FileVersion" v WHERE v."fileId" = f."id" AND v."version" = 1;

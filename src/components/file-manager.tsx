@@ -673,13 +673,14 @@ function FileDrawer({
           {file._count.links} 处工作项引用 · {file.shares.length} 个有效分享
         </p>
       </section>
-      <button
-        onClick={() => void remove(file)}
-        className="mt-8 flex items-center gap-2 text-sm text-rose-600"
-      >
-        <Trash2 size={16} />
-        移入回收站
-      </button>
+      {file.deletedAt ? (
+        <div className="mt-8 flex gap-4">
+          <button onClick={async()=>{await fetch(`/api/files/${file.id}/restore`,{method:"POST"});await reload();close()}} className="flex items-center gap-2 text-sm text-blue-600"><ArchiveRestore size={16}/>恢复文件</button>
+          <button onClick={async()=>{if(!window.confirm("永久删除后无法恢复，确认继续？"))return;const response=await fetch(`/api/files/${file.id}?permanent=1`,{method:"DELETE"});const body=await response.json();if(!response.ok)return setError(body.error);await reload();close()}} className="flex items-center gap-2 text-sm text-rose-600"><Trash2 size={16}/>永久删除</button>
+        </div>
+      ) : (
+        <button onClick={() => void remove(file)} className="mt-8 flex items-center gap-2 text-sm text-rose-600"><Trash2 size={16}/>移入回收站</button>
+      )}
     </Drawer>
   );
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { folderMoveCreatesCycle, MAX_FILE_SIZE, STORAGE_UPLOAD_STOP, uploadFitsQuota } from "./file-auth";
+import { folderMoveCreatesCycle, MAX_FILE_SIZE, STORAGE_UPLOAD_STOP, uploadFitsQuota } from "./file-rules";
 
 describe("file platform limits", () => {
   it("accepts a file inside size and quota limits", () => expect(uploadFitsQuota(BigInt(0), MAX_FILE_SIZE)).toBe(true));
