@@ -10,6 +10,8 @@ import { ProjectsPage } from "@/components/projects-page";
 import { TeamManagement } from "@/components/team-management";
 import { ApiKeyPage } from "@/components/api-key-page";
 import { AuditLogPage } from "@/components/audit-log-page";
+import { FileManager } from "@/components/file-manager";
+import { FileSharePage } from "@/components/file-share-page";
 import {
   Activity,
   AlertTriangle,
@@ -578,6 +580,7 @@ function GenericPage({ route }: { route: string }) {
   };
   const c = config[route] || config.projects;
   const Icon = c.icon;
+  if (route === "files") return <FileManager />;
   if (route === "my-tasks" || route === "tasks")
     return (
       <div className="space-y-5">
@@ -737,6 +740,7 @@ export function ChorifyApp({
   if (route === "login" || route === "register")
     return <AuthPage page={route} nextPath={nextPath} />;
   if (route.startsWith("invite/")) return <InvitePage token={route.slice(7)} />;
+  if (route.startsWith("share/")) return <FileSharePage token={route.slice(6)} />;
   const [rootRoute, detailId, projectSection] = route.split("/");
   return (
     <div className="min-h-screen bg-[#f4f7fb] text-[#17223b]">

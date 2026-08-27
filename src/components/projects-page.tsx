@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
+import { ProjectWorkspace } from "@/components/project-workspace";
+import { FileManager } from "@/components/file-manager";
 import {
   AlertTriangle,
   Bug,
@@ -264,7 +266,10 @@ function ProjectSection({
   project: Project;
   section: Section;
 }) {
+  if (section === "files") return <FileManager lockedProjectId={project.id} />;
   if (section === "team") return <ProjectTeam project={project} />;
+  if (section === "requirements" || section === "tasks" || section === "bugs" || section === "versions")
+    return <ProjectWorkspace projectId={project.id} module={section} />;
   if (section === "overview")
     return (
       <div className="space-y-5">
@@ -388,7 +393,7 @@ function ProjectSection({
         "V0.9 发布检查表.pdf",
       ],
     },
-  }[section];
+  }[section as "requirements" | "tasks" | "bugs" | "versions" | "files"];
   const Icon = config.icon;
   return (
     <div className="space-y-5">

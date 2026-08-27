@@ -75,25 +75,30 @@ enum ReleaseStatus {
 }
 
 model User {
-  id               String          @id @default(cuid())
+  id               String              @id @default(cuid())
   name             String
-  phone            String          @unique
+  phone            String              @unique
   passwordHash     String
-  avatarColor      String          @default("#376ce7")
-  systemRole       SystemRole      @default(MEMBER)
+  avatarColor      String              @default("#376ce7")
+  systemRole       SystemRole          @default(MEMBER)
   projectMembers   ProjectMember[]
   teamMembers      TeamMember[]
-  createdInvites   TeamInvite[]    @relation("TeamInviteCreator")
-  assignedTasks    Task[]          @relation("TaskAssignee")
-  coordinatedTasks Task[]          @relation("TaskCoordinator")
-  acceptedTasks    Task[]          @relation("TaskAcceptor")
+  createdInvites   TeamInvite[]        @relation("TeamInviteCreator")
+  assignedTasks    Task[]              @relation("TaskAssignee")
+  coordinatedTasks Task[]              @relation("TaskCoordinator")
+  acceptedTasks    Task[]              @relation("TaskAcceptor")
   reports          WorkReport[]
   acceptances      Acceptance[]
   apiTokens        ApiToken[]
   auditLogs        AuditLog[]
   feedbacks        Feedback[]
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
+  createdFolders   FileFolder[]        @relation("FolderCreator")
+  createdFiles     FileAsset[]         @relation("FileCreator")
+  uploadedVersions FileVersion[]       @relation("VersionUploader")
+  createdShares    FileShare[]         @relation("ShareCreator")
+  uploadSessions   FileUploadSession[]
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
 }
 
 model Team {
@@ -155,12 +160,12 @@ model SmsCode {
 }
 
 model Project {
-  id             String            @id @default(cuid())
+  id             String              @id @default(cuid())
   teamId         String
-  code           String            @unique
+  code           String              @unique
   name           String
   description    String
-  status         String            @default("ACTIVE")
+  status         String              @default("ACTIVE")
   startDate      DateTime?
   endDate        DateTime?
   members        ProjectMember[]
@@ -170,10 +175,13 @@ model Project {
   versions       Version[]
   releases       Release[]
   files          FileAsset[]
+  folders        FileFolder[]
+  fileShares     FileShare[]
+  fileUploads    FileUploadSession[]
   apiTokenScopes ApiTokenProject[]
-  team           Team              @relation(fields: [teamId], references: [id], onDelete: Restrict)
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
+  team           Team                @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
 
   @@index([teamId])
 }
@@ -331,17 +339,110 @@ model Release {
   createdAt    DateTime      @default(now())
 }
 
+model FileFolder {
+  id        String       @id @default(cuid())
+  projectId String
+  parentId  String?
+  name      String
+  path      String
+  sortOrder Int          @default(0)
+  creatorId String
+  deletedAt DateTime?
+  project   Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  parent    FileFolder?  @relation("FolderTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children  FileFolder[] @relation("FolderTree")
+  creator   User         @relation("FolderCreator", fields: [creatorId], references: [id])
+  files     FileAsset[]
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@unique([projectId, parentId, name])
+  @@index([projectId, parentId, deletedAt])
+}
+
 model FileAsset {
-  id         String         @id @default(cuid())
-  projectId  String
-  name       String
-  mimeType   String
-  size       Int
-  storageKey String?
-  tags       String[]
-  project    Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  links      ResourceLink[]
-  createdAt  DateTime       @default(now())
+  id               String         @id @default(cuid())
+  projectId        String
+  folderId         String?
+  creatorId        String?
+  name             String
+  mimeType         String
+  size             BigInt
+  storageKey       String?
+  currentVersionId String?        @unique
+  tags             String[]
+  deletedAt        DateTime?
+  project          Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  folder           FileFolder?    @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  creator          User?          @relation("FileCreator", fields: [creatorId], references: [id])
+  versions         FileVersion[]  @relation("FileVersions")
+  currentVersion   FileVersion?   @relation("CurrentFileVersion", fields: [currentVersionId], references: [id], onDelete: SetNull)
+  links            ResourceLink[]
+  shares           FileShare[]
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@index([projectId, folderId, deletedAt])
+}
+
+model FileVersion {
+  id           String     @id @default(cuid())
+  fileId       String
+  version      Int
+  objectKey    String     @unique
+  originalName String
+  mimeType     String
+  size         BigInt
+  sha256       String?
+  uploaderId   String
+  file         FileAsset  @relation("FileVersions", fields: [fileId], references: [id], onDelete: Cascade)
+  currentFor   FileAsset? @relation("CurrentFileVersion")
+  uploader     User       @relation("VersionUploader", fields: [uploaderId], references: [id])
+  createdAt    DateTime   @default(now())
+
+  @@unique([fileId, version])
+  @@index([fileId, createdAt])
+}
+
+model FileUploadSession {
+  id          String   @id @default(cuid())
+  projectId   String
+  folderId    String?
+  fileId      String?
+  userId      String
+  name        String
+  mimeType    String
+  size        BigInt
+  objectKey   String   @unique
+  multipartId String
+  status      String   @default("PENDING")
+  expiresAt   DateTime
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId, status, expiresAt])
+}
+
+model FileShare {
+  id           String    @id @default(cuid())
+  projectId    String
+  fileId       String
+  creatorId    String
+  tokenHash    String    @unique
+  codeHash     String?
+  expiresAt    DateTime
+  maxDownloads Int?
+  downloads    Int       @default(0)
+  revokedAt    DateTime?
+  project      Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  file         FileAsset @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  creator      User      @relation("ShareCreator", fields: [creatorId], references: [id])
+  createdAt    DateTime  @default(now())
+
+  @@index([fileId, createdAt])
+  @@index([projectId, revokedAt])
 }
 
 model ResourceLink {

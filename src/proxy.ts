@@ -12,7 +12,8 @@ export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
   if (pathname === "/members" || pathname.startsWith("/members/")) return NextResponse.redirect(new URL(pathname.replace(/^\/members/, "/teams"), request.url), 308);
   const isInvitePage = pathname.startsWith("/invite/");
-  const isPublic = PUBLIC_PAGES.has(pathname) || isInvitePage || pathname.startsWith("/api/invites/") || PUBLIC_API_PREFIXES.some((prefix) => pathname.startsWith(prefix));
+  const isSharePage = pathname.startsWith("/share/");
+  const isPublic = PUBLIC_PAGES.has(pathname) || isInvitePage || isSharePage || pathname.startsWith("/api/invites/") || pathname.startsWith("/api/shares/") || PUBLIC_API_PREFIXES.some((prefix) => pathname.startsWith(prefix));
   const userId = await verifySessionToken(request.cookies.get(SESSION_COOKIE)?.value);
 
   if (!userId && !isPublic) {

@@ -1,0 +1,227 @@
+import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
+import type { Prisma } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
+import { getRequestUserId } from "@/lib/team-permissions";
+import { getProjectAccess } from "@/lib/project-permissions";
+
+const ids = z.string().cuid().nullable().optional();
+const baseSchemas = {
+  requirements: z.object({
+    title: z.string().min(2).max(120),
+    description: z.string().max(5000),
+    acceptanceCriteria: z.string().min(2).max(5000),
+    priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]),
+    status: z.string().min(1).max(30),
+    targetVersionId: ids,
+  }),
+  tasks: z.object({
+    title: z.string().min(2).max(120),
+    description: z.string().max(5000),
+    acceptanceCriteria: z.string().min(2).max(5000),
+    priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]),
+    status: z.enum([
+      "TODO",
+      "IN_PROGRESS",
+      "PENDING_ACCEPTANCE",
+      "NEEDS_CHANGES",
+      "ACCEPTED",
+      "DONE",
+    ]),
+    dueAt: z.string().datetime().nullable().optional(),
+    requirementId: ids,
+    versionId: ids,
+    assigneeId: ids,
+    coordinatorId: ids,
+    acceptorId: ids,
+    dependencyIds: z.array(z.string().cuid()).default([]),
+  }),
+  bugs: z.object({
+    title: z.string().min(2).max(120),
+    description: z.string().max(5000),
+    reproduceSteps: z.string().min(2).max(5000),
+    severity: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]),
+    status: z.enum([
+      "NEW",
+      "CONFIRMED",
+      "ASSIGNED",
+      "FIXING",
+      "PENDING_VERIFICATION",
+      "VERIFIED",
+      "PENDING_RELEASE",
+      "CLOSED",
+      "REOPENED",
+      "DEFERRED",
+      "REJECTED",
+    ]),
+    requirementId: ids,
+    taskId: ids,
+    foundVersionId: ids,
+    fixedVersionId: ids,
+  }),
+  versions: z.object({
+    name: z.string().min(1).max(50),
+    goal: z.string().min(2).max(3000),
+    status: z.enum([
+      "PLANNING",
+      "DEVELOPING",
+      "TESTING",
+      "PENDING_RELEASE",
+      "RELEASED",
+      "ARCHIVED",
+      "CANCELLED",
+    ]),
+    plannedAt: z.string().datetime().nullable().optional(),
+  }),
+  releases: z.object({
+    versionId: z.string().cuid(),
+    build: z.string().min(1).max(80),
+    environment: z.string().min(1).max(50),
+    notes: z.string().max(5000),
+    rollbackPlan: z.string().min(2).max(5000),
+    status: z.enum([
+      "PLANNED",
+      "RUNNING",
+      "SUCCEEDED",
+      "FAILED",
+      "ROLLED_BACK",
+    ]),
+    releasedAt: z.string().datetime().nullable().optional(),
+  }),
+} as const;
+const resources = {
+  requirements: "REQUIREMENT",
+  tasks: "TASK",
+  bugs: "BUG",
+  versions: "VERSION",
+  releases: "RELEASE",
+} as const;
+const clean = (data: Record<string, unknown>) =>
+  Object.fromEntries(
+    Object.entries(data).map(([k, v]) => [k, v === "" ? null : v]),
+  );
+async function owns(module: string, id: string, projectId: string) {
+  if (module === "requirements")
+    return prisma.requirement.findFirst({ where: { id, projectId } });
+  if (module === "tasks")
+    return prisma.task.findFirst({ where: { id, projectId } });
+  if (module === "bugs")
+    return prisma.bug.findFirst({ where: { id, projectId } });
+  if (module === "versions")
+    return prisma.version.findFirst({ where: { id, projectId } });
+  if (module === "releases")
+    return prisma.release.findFirst({ where: { id, projectId } });
+  return null;
+}
+
+export async function PATCH(
+  request: NextRequest,
+  {
+    params,
+  }: { params: Promise<{ projectId: string; module: string; itemId: string }> },
+) {
+  const userId = await getRequestUserId(request);
+  const { projectId, module, itemId } = await params;
+  if (!userId) return NextResponse.json({ error: "请先登录" }, { status: 401 });
+  const access = await getProjectAccess(projectId, userId);
+  if (!(
+    access?.canManage ||
+    (access?.projectMember && access.projectMember.role !== "GUEST")
+  ))
+    return NextResponse.json({ error: "没有编辑权限" }, { status: 403 });
+  if (!(module in baseSchemas) || !(await owns(module, itemId, projectId)))
+    return NextResponse.json({ error: "记录不存在" }, { status: 404 });
+  const parsed = baseSchemas[module as keyof typeof baseSchemas].safeParse(
+    await request.json(),
+  );
+  if (!parsed.success)
+    return NextResponse.json(
+      { error: parsed.error.issues[0]?.message || "数据不完整" },
+      { status: 400 },
+    );
+  const data = clean(parsed.data as Record<string, unknown>);
+  if (module === "tasks") {
+    const { dependencyIds, ...taskData } = data;
+    if ((dependencyIds as string[]).includes(itemId))
+      return NextResponse.json({ error: "任务不能依赖自身" }, { status: 400 });
+    await prisma.$transaction([
+      prisma.taskDependency.deleteMany({ where: { taskId: itemId } }),
+      prisma.task.update({
+        where: { id: itemId },
+        data: taskData as Prisma.TaskUncheckedUpdateInput,
+      }),
+      ...((dependencyIds as string[]).length
+        ? [prisma.taskDependency.createMany({ data: (dependencyIds as string[]).map((dependsOnId) => ({ taskId: itemId, dependsOnId })) })]
+        : []),
+    ]);
+  } else if (module === "requirements")
+    await prisma.requirement.update({
+      where: { id: itemId },
+      data: data as Prisma.RequirementUncheckedUpdateInput,
+    });
+  else if (module === "bugs")
+    await prisma.bug.update({ where: { id: itemId }, data: data as Prisma.BugUncheckedUpdateInput });
+  else if (module === "versions")
+    await prisma.version.update({ where: { id: itemId }, data: data as Prisma.VersionUncheckedUpdateInput });
+  else
+    await prisma.release.update({ where: { id: itemId }, data: data as Prisma.ReleaseUncheckedUpdateInput });
+  await prisma.auditLog.create({
+    data: {
+      userId,
+      actorType: "USER",
+      action: `UPDATE_${resources[module as keyof typeof resources]}`,
+      resource: resources[module as keyof typeof resources],
+      resourceId: itemId,
+      channel: "WEB",
+      metadata: { projectId, result: "SUCCESS" },
+    },
+  });
+  return NextResponse.json({ ok: true });
+}
+
+export async function DELETE(
+  request: NextRequest,
+  {
+    params,
+  }: { params: Promise<{ projectId: string; module: string; itemId: string }> },
+) {
+  const userId = await getRequestUserId(request);
+  const { projectId, module, itemId } = await params;
+  if (!userId) return NextResponse.json({ error: "请先登录" }, { status: 401 });
+  const access = await getProjectAccess(projectId, userId);
+  if (!access?.canManage)
+    return NextResponse.json(
+      { error: "只有项目管理员可以删除" },
+      { status: 403 },
+    );
+  if (!(module in resources) || !(await owns(module, itemId, projectId)))
+    return NextResponse.json({ error: "记录不存在" }, { status: 404 });
+  try {
+    if (module === "requirements")
+      await prisma.requirement.delete({ where: { id: itemId } });
+    else if (module === "tasks")
+      await prisma.task.delete({ where: { id: itemId } });
+    else if (module === "bugs")
+      await prisma.bug.delete({ where: { id: itemId } });
+    else if (module === "versions")
+      await prisma.version.delete({ where: { id: itemId } });
+    else await prisma.release.delete({ where: { id: itemId } });
+  } catch {
+    return NextResponse.json(
+      { error: "该记录仍被其他工作项引用，请先解除关联" },
+      { status: 409 },
+    );
+  }
+  await prisma.auditLog.create({
+    data: {
+      userId,
+      actorType: "USER",
+      action: `DELETE_${resources[module as keyof typeof resources]}`,
+      resource: resources[module as keyof typeof resources],
+      resourceId: itemId,
+      channel: "WEB",
+      metadata: { projectId, result: "SUCCESS" },
+    },
+  });
+  return NextResponse.json({ ok: true });
+}
