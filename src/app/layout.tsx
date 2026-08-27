@@ -24,8 +24,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="zh-CN"
       className={`${geistSans.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
-      <body>{children}</body>
+      <body><script dangerouslySetInnerHTML={{__html:`try{document.documentElement.dataset.theme=localStorage.getItem('chorify-theme')||'light'}catch(e){}`}}/>{children}</body>
     </html>
   );
 }

@@ -91,6 +91,7 @@ model User {
   acceptances      Acceptance[]
   apiTokens        ApiToken[]
   auditLogs        AuditLog[]
+  feedbacks        Feedback[]
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
 }
@@ -394,4 +395,32 @@ model AuditLog {
   createdAt  DateTime @default(now())
 
   @@index([createdAt])
+}
+
+model Feedback {
+  id          String               @id @default(cuid())
+  userId      String
+  type        String
+  content     String
+  status      String               @default("OPEN")
+  user        User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  attachments FeedbackAttachment[]
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+}
+
+model FeedbackAttachment {
+  id         String   @id @default(cuid())
+  feedbackId String
+  name       String
+  mimeType   String
+  size       Int
+  data       Bytes
+  feedback   Feedback @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@index([feedbackId])
 }

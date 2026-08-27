@@ -50,3 +50,24 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .primary-button:hover { background: #2e60d8; }
 .secondary-button { border: 1px solid #dfe5ee; background: white; color: #526078; }
 .secondary-button:hover { border-color: #bfd0f5; color: #2458ce; }
+
+html[data-theme="dark"] { color-scheme: dark; --background: #0b1220; --foreground: #e5edf8; --line: #263247; --muted: #91a0b8; }
+html[data-theme="dark"] body { background: #0b1220; color: #e5edf8; }
+html[data-theme="dark"] aside,
+html[data-theme="dark"] header { border-color: #263247 !important; background-color: rgba(15,23,42,.96) !important; }
+html[data-theme="dark"] .card,
+html[data-theme="dark"] section[role="dialog"],
+html[data-theme="dark"] .bg-white { border-color: #263247 !important; background-color: #111b2d !important; }
+html[data-theme="dark"] .bg-slate-50,
+html[data-theme="dark"] .bg-slate-100 { background-color: #182337 !important; }
+html[data-theme="dark"] .bg-\[\#f4f7fb\] { background-color: #0b1220 !important; }
+html[data-theme="dark"] input,
+html[data-theme="dark"] select,
+html[data-theme="dark"] textarea { border-color: #33415a; background-color: #0f192a; color: #e5edf8; }
+html[data-theme="dark"] .text-slate-900,
+html[data-theme="dark"] .text-\[\#17223b\] { color: #f1f5fb !important; }
+html[data-theme="dark"] .text-slate-600,
+html[data-theme="dark"] .text-slate-500 { color: #a9b6ca !important; }
+html[data-theme="dark"] .border-slate-100,
+html[data-theme="dark"] .border-slate-200,
+html[data-theme="dark"] .border-\[\#edf1f6\] { border-color: #263247 !important; }

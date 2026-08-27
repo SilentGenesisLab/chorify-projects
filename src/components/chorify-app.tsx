@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { AuthPage } from "@/components/auth-page";
 import { InvitePage } from "@/components/invite-page";
 import { ProjectsPage } from "@/components/projects-page";
@@ -27,6 +27,13 @@ import {
   Rocket,
   Search,
   LogOut,
+  Moon,
+  Sun,
+  HelpCircle,
+  ExternalLink,
+  ChevronUp,
+  Upload,
+  CheckCircle2,
   Target,
   Users,
   X,
@@ -106,6 +113,18 @@ function Sidebar({
   user?: { name: string; role: string };
 }) {
   const router = useRouter();
+  const [accountOpen, setAccountOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  function setTheme(theme: "light" | "dark") {
+    document.documentElement.dataset.theme = theme;
+    window.localStorage.setItem("chorify-theme", theme);
+    setAccountOpen(false);
+  }
+  async function logout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.replace("/login");
+    router.refresh();
+  }
   return (
     <>
       {open && (
@@ -189,8 +208,18 @@ function Sidebar({
             );
           })}
         </nav>
-        <div className="border-t border-[#edf1f6] p-4">
-          <div className="flex items-center gap-3">
+        <div className="relative border-t border-[#edf1f6] p-3">
+          {accountOpen && <>
+            <button aria-label="关闭账户菜单" onClick={()=>setAccountOpen(false)} className="fixed inset-0 z-40 cursor-default"/>
+            <div className="absolute bottom-[76px] left-3 right-3 z-50 overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 shadow-[0_18px_55px_rgba(15,23,42,.18)]">
+              <div className="mb-1 border-b border-slate-100 px-3 py-2"><p className="truncate text-sm font-semibold">{user?.name || "当前用户"}</p><p className="mt-0.5 text-xs text-slate-400">{user?.role || "项目成员"}</p></div>
+              <div className="px-2 py-2"><p className="mb-2 text-[11px] font-medium text-slate-400">显示模式</p><div className="grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1"><button onClick={()=>setTheme("light")} className="flex h-8 items-center justify-center gap-1.5 rounded-lg bg-white text-xs font-medium text-slate-700 shadow-sm"><Sun size={14}/>浅色</button><button onClick={()=>setTheme("dark")} className="flex h-8 items-center justify-center gap-1.5 rounded-lg text-xs font-medium text-slate-600"><Moon size={14}/>深色</button></div></div>
+              <button onClick={()=>{setAccountOpen(false);setFeedbackOpen(true)}} className="flex h-10 w-full items-center gap-3 rounded-xl px-3 text-sm text-slate-600 hover:bg-slate-50"><HelpCircle size={17}/>帮助与反馈</button>
+              <a href="https://official.sligenai.cn/" target="_blank" rel="noopener noreferrer" onClick={()=>setAccountOpen(false)} className="flex h-10 items-center gap-3 rounded-xl px-3 text-sm text-slate-600 hover:bg-slate-50"><ExternalLink size={17}/>洞墟官网<ExternalLink className="ml-auto text-slate-300" size={13}/></a>
+              <button onClick={()=>void logout()} className="flex h-10 w-full items-center gap-3 rounded-xl px-3 text-sm text-rose-600 hover:bg-rose-50"><LogOut size={17}/>退出登录</button>
+            </div>
+          </>}
+          <button onClick={()=>setAccountOpen((value)=>!value)} className="flex w-full items-center gap-3 rounded-xl p-1 text-left hover:bg-slate-50">
             <Avatar name={user?.name || "用户"} />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold">
@@ -200,23 +229,20 @@ function Sidebar({
                 {user?.role || "项目成员"}
               </p>
             </div>
-            <button
-              aria-label="退出登录"
-              title="退出登录"
-              onClick={async () => {
-                await fetch("/api/auth/logout", { method: "POST" });
-                router.replace("/login");
-                router.refresh();
-              }}
-              className="text-slate-400 hover:text-rose-500"
-            >
-              <LogOut size={17} />
-            </button>
-          </div>
+            <ChevronUp className={`text-slate-400 transition ${accountOpen?"rotate-180":""}`} size={17}/>
+          </button>
         </div>
       </aside>
+      {feedbackOpen && <FeedbackModal close={()=>setFeedbackOpen(false)}/>} 
     </>
   );
+}
+
+function FeedbackModal({ close }: { close: () => void }) {
+  const [type,setType]=useState("PRODUCT"), [content,setContent]=useState(""), [files,setFiles]=useState<File[]>([]);
+  const [error,setError]=useState(""), [sending,setSending]=useState(false), [success,setSuccess]=useState(false);
+  async function submit(event:FormEvent){event.preventDefault();setError("");if(content.trim().length<5)return setError("请至少输入 5 个字符的反馈内容");setSending(true);try{const body=new FormData();body.set("type",type);body.set("content",content.trim());files.forEach((file)=>body.append("files",file));const response=await fetch("/api/feedback",{method:"POST",body});const data=await response.json();if(!response.ok)throw new Error(data.error||"提交失败");setSuccess(true)}catch(cause){setError(cause instanceof Error?cause.message:"提交失败")}finally{setSending(false)}}
+  return <div className="fixed inset-0 z-[80] grid place-items-center bg-slate-950/35 p-4 backdrop-blur-sm"><button aria-label="关闭反馈" onClick={close} className="absolute inset-0"/><section role="dialog" aria-modal="true" className="relative w-full max-w-[560px] overflow-hidden rounded-2xl border border-white/70 bg-white shadow-2xl"><header className="flex items-center border-b px-6 py-4"><div><h3 className="text-lg font-semibold">帮助与反馈</h3><p className="mt-0.5 text-xs text-slate-400">你的建议将帮助我们持续改善产品体验</p></div><button onClick={close} className="ml-auto text-slate-400"><X size={20}/></button></header>{success?<div className="px-6 py-14 text-center"><CheckCircle2 className="mx-auto text-emerald-500" size={42}/><h4 className="mt-4 font-semibold">反馈提交成功</h4><p className="mt-1 text-sm text-slate-500">感谢你的建议，我们会认真查看。</p><button onClick={close} className="primary-button mt-6">完成</button></div>:<form onSubmit={submit} className="space-y-5 p-6"><label className="block"><span className="mb-2 block text-sm font-medium">反馈类型</span><select value={type} onChange={(event)=>setType(event.target.value)} className="field"><option value="PRODUCT">产品建议</option><option value="BUG">问题反馈</option><option value="EXPERIENCE">体验优化</option><option value="OTHER">其他</option></select></label><label className="block"><span className="mb-2 block text-sm font-medium">反馈内容</span><textarea value={content} onChange={(event)=>setContent(event.target.value.slice(0,2000))} rows={6} className="w-full resize-none rounded-xl border border-slate-200 bg-white p-3 text-sm outline-none focus:border-blue-500 focus:ring-3 focus:ring-blue-100" placeholder="请描述你遇到的问题、建议或期望……"/><span className="mt-1 block text-right text-xs text-slate-400">{content.length}/2000</span></label><label className="block"><span className="mb-2 block text-sm font-medium">附件 <i className="font-normal not-italic text-slate-400">（最多 3 个，单个不超过 5MB）</i></span><span className="flex min-h-20 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50 text-sm text-slate-500 hover:border-blue-400 hover:bg-blue-50/50"><Upload size={20} className="mb-1 text-blue-500"/>点击选择文件<input type="file" multiple className="hidden" onChange={(event)=>{const next=Array.from(event.target.files||[]).slice(0,3);setFiles(next);setError(next.some((file)=>file.size>5*1024*1024)?"单个附件不能超过 5MB":"")}}/></span>{files.length>0&&<div className="mt-2 space-y-1">{files.map((file)=><div key={`${file.name}-${file.size}`} className="flex items-center rounded-lg bg-slate-50 px-3 py-2 text-xs"><span className="truncate">{file.name}</span><span className="ml-auto text-slate-400">{(file.size/1024).toFixed(0)} KB</span></div>)}</div>}</label>{error&&<div role="alert" className="rounded-xl bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}<div className="flex justify-end gap-2"><button type="button" onClick={close} className="secondary-button">取消</button><button disabled={sending} className="primary-button disabled:opacity-60">{sending?"提交中…":"提交反馈"}</button></div></form>}</section></div>
 }
 
 function Header({ route, onMenu }: { route: string; onMenu: () => void }) {
