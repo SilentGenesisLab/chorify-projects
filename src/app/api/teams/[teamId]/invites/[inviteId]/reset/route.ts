@@ -15,7 +15,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (await isRateLimited(userId, "RESET_TEAM_INVITE", 8)) return NextResponse.json({ error: "操作过于频繁，请稍后再试" }, { status: 429 });
   const token = createTeamInviteToken();
   const invite = await prisma.$transaction(async (tx) => {
-    const updated = await tx.teamInvite.update({ where: { id: inviteId }, data: { ...token, useCount: 0, revokedAt: null, expiresAt: new Date(Date.now() + 7 * 86_400_000) } });
+    const updated = await tx.teamInvite.update({ where: { id: inviteId }, data: { prefix: token.prefix, tokenHash: token.tokenHash, useCount: 0, revokedAt: null, expiresAt: new Date(Date.now() + 7 * 86_400_000) } });
     await tx.auditLog.create({ data: { userId, actorType: "USER", action: "RESET_TEAM_INVITE", resource: "TEAM_INVITE", resourceId: inviteId, channel: "WEB", metadata: { teamId } } });
     return updated;
   });

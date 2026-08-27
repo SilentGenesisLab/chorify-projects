@@ -1,7 +1,7 @@
 import type { TeamRole } from "@prisma/client";
 import type { NextRequest } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { SESSION_COOKIE, verifySessionToken } from "@/lib/session";
+import { prisma } from "./prisma";
+import { SESSION_COOKIE, verifySessionToken } from "./session";
 
 export const TEAM_ROLE_LABELS: Record<TeamRole, string> = {
   OWNER: "团队所有者",
