@@ -20,7 +20,6 @@ export function AuthPage({ page, nextPath = "" }: Props) {
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [countdown, setCountdown] = useState(0);
-  const [agreed, setAgreed] = useState(false);
   useEffect(() => {
     if (!countdown) return;
     const timer = window.setInterval(() => setCountdown((value) => Math.max(0, value - 1)), 1000);
@@ -42,7 +41,6 @@ export function AuthPage({ page, nextPath = "" }: Props) {
 
   async function submit(event: FormEvent) {
     event.preventDefault(); setError("");
-    if (!agreed) return setError("请先阅读并同意用户协议和隐私政策");
     if (!/^1\d{10}$/.test(phone)) return setError("请输入正确的 11 位手机号");
     if (registering && username.trim().length < 2) return setError("请输入至少 2 个字符的账户名");
     if ((registering || loginMode === "password") && password.length < 8) return setError("密码至少需要 8 位");
@@ -83,10 +81,6 @@ export function AuthPage({ page, nextPath = "" }: Props) {
         {needsCode && <Field label="验证码"><div className="relative"><input value={code} onChange={(event)=>setCode(event.target.value.replace(/\D/g,"").slice(0,6))} inputMode="numeric" autoComplete="one-time-code" className="field pr-28" placeholder="请输入 6 位验证码"/><button type="button" disabled={sending || countdown>0} onClick={sendCode} className="absolute right-3 top-3 text-sm font-medium text-blue-600 disabled:text-slate-400">{sending?"发送中...":countdown?`${countdown} 秒后重试`:"获取验证码"}</button></div></Field>}
         {(registering || loginMode === "password") && <Field label="密码"><div className="relative"><input value={password} onChange={(event)=>setPassword(event.target.value)} type={showPassword?"text":"password"} autoComplete={registering?"new-password":"current-password"} className="field pr-12" placeholder={registering?"至少 8 位，包含字母和数字":"请输入密码"}/><button type="button" aria-label="显示或隐藏密码" onClick={()=>setShowPassword(!showPassword)} className="absolute right-3 top-3 text-slate-400">{showPassword?<EyeOff size={18}/>:<Eye size={18}/>}</button></div></Field>}
         {registering && <Field label="确认密码"><input value={confirmPassword} onChange={(event)=>setConfirmPassword(event.target.value)} type={showPassword?"text":"password"} autoComplete="new-password" className="field" placeholder="再次输入密码"/></Field>}
-        <label className="flex cursor-pointer items-start gap-2.5 text-xs leading-5 text-slate-500">
-          <input type="checkbox" checked={agreed} onChange={(event)=>setAgreed(event.target.checked)} className="mt-0.5 size-4 shrink-0 accent-[#376ce7]"/>
-          <span>我已阅读并同意<Link href="https://protocol2.sligenai.cn/silgene-protocolsv2/protocols/slientgene/ProductUserAgreement.html" target="_blank" rel="noopener noreferrer" className="font-medium text-blue-600 hover:underline">《洞墟产品用户协议》</Link>和<Link href="https://protocol2.sligenai.cn/silgene-protocolsv2/protocols/slientgene/ProductPrivacyPolicy.html" target="_blank" rel="noopener noreferrer" className="font-medium text-blue-600 hover:underline">《洞墟产品隐私政策》</Link></span>
-        </label>
         {error && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
         <button disabled={loading} className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#376ce7] font-semibold text-white shadow-sm shadow-blue-200 disabled:opacity-60">{loading?<LoaderCircle className="animate-spin" size={18}/>:<>{registering?"注册并登录":"登录"}<ArrowRight size={17}/></>}</button>
       </form>
