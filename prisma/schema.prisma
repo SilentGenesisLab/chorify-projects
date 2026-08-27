@@ -121,20 +121,21 @@ model TeamMember {
 }
 
 model TeamInvite {
-  id          String    @id @default(cuid())
-  teamId      String
-  createdById String
-  role        TeamRole  @default(MEMBER)
-  prefix      String
-  tokenHash   String    @unique
-  expiresAt   DateTime
-  maxUses     Int       @default(50)
-  useCount    Int       @default(0)
-  revokedAt   DateTime?
-  team        Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  createdBy   User      @relation("TeamInviteCreator", fields: [createdById], references: [id], onDelete: Cascade)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id              String    @id @default(cuid())
+  teamId          String
+  createdById     String
+  role            TeamRole  @default(MEMBER)
+  prefix          String
+  tokenHash       String    @unique
+  tokenCiphertext String?
+  expiresAt       DateTime
+  maxUses         Int       @default(50)
+  useCount        Int       @default(0)
+  revokedAt       DateTime?
+  team            Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  createdBy       User      @relation("TeamInviteCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   @@index([teamId, createdAt])
   @@index([createdById, createdAt])

@@ -1,6 +1,6 @@
 import { PrismaClient, Priority, ProjectRole, SystemRole, TaskStatus, TeamRole, VersionStatus } from "@prisma/client";
 import { hash } from "bcryptjs";
-import { createTeamInviteToken } from "../src/lib/security";
+import { createTeamInviteToken, encryptTeamInviteToken } from "../src/lib/security";
 
 const prisma = new PrismaClient();
 
@@ -43,7 +43,7 @@ async function main() {
     ] },
     invites: { create: {
       createdById: chen.id, role: TeamRole.MEMBER, prefix: invite.prefix,
-      tokenHash: invite.tokenHash, maxUses: 50, expiresAt: new Date(Date.now() + 7 * 86_400_000),
+      tokenHash: invite.tokenHash, tokenCiphertext: encryptTeamInviteToken(invite.token), maxUses: 50, expiresAt: new Date(Date.now() + 7 * 86_400_000),
     } },
   } });
   const project = await prisma.project.create({ data: {

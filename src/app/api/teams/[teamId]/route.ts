@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { decryptTeamInviteToken } from "@/lib/security";
 import { getRequestUserId, getTeamMembership, isTeamManager, maskedPhone, TEAM_ROLE_LABELS } from "@/lib/team-permissions";
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ teamId: string }> }) {
@@ -21,6 +22,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     permissions: { canManage, canInviteAdmin: membership.role === "OWNER", canCreateProject: canManage },
     members: team.members.map((item) => ({ id: item.id, userId: item.userId, name: item.user.name, phone: maskedPhone(item.user.phone), avatarColor: item.user.avatarColor, role: item.role, roleLabel: TEAM_ROLE_LABELS[item.role], joinedAt: item.joinedAt })),
     projects: team.projects.map((project) => ({ id: project.id, code: project.code, name: project.name, description: project.description, status: project.status, memberCount: project._count.members, taskCount: project._count.tasks, updatedAt: project.updatedAt })),
-    invites: invites.map((invite) => ({ id: invite.id, prefix: invite.prefix, role: invite.role, roleLabel: TEAM_ROLE_LABELS[invite.role], maxUses: invite.maxUses, useCount: invite.useCount, expiresAt: invite.expiresAt, revokedAt: invite.revokedAt, createdAt: invite.createdAt, createdBy: invite.createdBy.name })),
+    invites: invites.map((invite) => {
+      const token = invite.tokenCiphertext ? decryptTeamInviteToken(invite.tokenCiphertext) : null;
+      return { id: invite.id, prefix: invite.prefix, url: token ? `${request.nextUrl.origin}/invite/${token}` : null, role: invite.role, roleLabel: TEAM_ROLE_LABELS[invite.role], maxUses: invite.maxUses, useCount: invite.useCount, expiresAt: invite.expiresAt, revokedAt: invite.revokedAt, createdAt: invite.createdAt, createdBy: invite.createdBy.name };
+    }),
   } });
 }
