@@ -36,7 +36,16 @@ export function ApiKeyPage() {
     } catch (cause) { setError(cause instanceof Error ? cause.message : "加载失败"); }
     finally { setLoading(false); }
   }
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    let active = true;
+    void fetch("/api/v1/tokens").then(async (response) => {
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "加载失败");
+      if (active) { setTokens(data.tokens); setProjects(data.projects); }
+    }).catch((cause) => { if (active) setError(cause instanceof Error ? cause.message : "加载失败"); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, []);
 
   const visible = useMemo(() => tokens.filter((token) =>
     token.name.toLowerCase().includes(query.toLowerCase()) &&

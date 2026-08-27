@@ -15,11 +15,15 @@
 
 个人 API Key 使用 `Authorization: Bearer chp_...`：
 
-- `GET /api/v1/me/work-context`
-- `GET /api/v1/tasks/:taskId/context`
-- `POST /api/v1/tasks/:taskId/reports`
+- `GET /api/v1/tokens`：网页登录用户查询自己的令牌和可授权项目
+- `POST /api/v1/tokens`：创建令牌，完整密钥只返回一次
+- `PATCH /api/v1/tokens/:tokenId`：修改名称、项目范围、权限和有效期
+- `DELETE /api/v1/tokens/:tokenId`：不可恢复地撤销令牌
+- `GET /api/v1/me/work-context`：需要 `task:read`
+- `GET /api/v1/tasks/:taskId/context`：需要 `task:read`
+- `POST /api/v1/tasks/:taskId/reports`：需要 `task:report`
 
-工作汇报接口只允许任务负责人提交，提交后进入待验收并生成审计日志。
+令牌支持多项目和细粒度权限。业务接口同时校验用户项目成员身份、令牌项目范围和所需权限。已预留 `project:*`、`requirement:*`、`task:*`、`bug:*`、`version:*`、`file:*` 和 `document:*` 权限命名空间。
 
 ## 预发布部署
 

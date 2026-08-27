@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { sha256 } from "@/lib/security";
-import type { ApiTokenPermission } from "@/lib/api-token-permissions";
+import { hasApiPermission, type ApiTokenPermission } from "@/lib/api-token-permissions";
 
 export async function authenticateApi(request: Request, permission: ApiTokenPermission) {
   const raw = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
@@ -10,7 +10,7 @@ export async function authenticateApi(request: Request, permission: ApiTokenPerm
     include: { user: true, projects: { select: { projectId: true } } },
   });
   if (!token || token.revokedAt || (token.expiresAt && token.expiresAt <= new Date())) return null;
-  if (!token.permissions.includes(permission)) return null;
+  if (!hasApiPermission(token.permissions, permission)) return null;
   await prisma.apiToken.update({ where: { id: token.id }, data: { lastUsedAt: new Date() } });
   return token;
 }

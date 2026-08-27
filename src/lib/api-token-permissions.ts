@@ -21,3 +21,4 @@ export const API_PERMISSION_LABELS: Record<ApiTokenPermission, string> = {
   "file:read": "查看文件", "file:create": "创建文件", "file:update": "修改文件", "document:read": "查看文档", "document:write": "写入文档",
 };
 export const DEFAULT_API_PERMISSIONS: ApiTokenPermission[] = ["project:read", "requirement:read", "task:read", "task:report", "bug:read", "version:read", "file:read", "document:read"];
+export const hasApiPermission = (permissions: readonly string[], required: ApiTokenPermission) => permissions.includes(required);
