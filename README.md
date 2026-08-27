@@ -30,3 +30,12 @@
 ## 预发布部署
 
 预发布环境使用 `deploy/docker-compose.staging.yml`，应用仅监听服务器回环地址 `127.0.0.1:3308`，由 Nginx 对外提供访问。健康检查地址为 `/api/health`。
+
+服务器代码目录为 `/home/donxu/webServer/aipmf`，跟踪 `uat` 分支。以后代码合并并推送到 `uat` 后，在服务器执行：
+
+```bash
+cd /home/donxu/webServer/aipmf
+bash deploy/update-staging.sh
+```
+
+脚本使用 `git pull --ff-only` 拉取仓库，然后执行数据库迁移、镜像构建和容器更新；`.env.staging` 只保存在服务器，不提交到 Git。
