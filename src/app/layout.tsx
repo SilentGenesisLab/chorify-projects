@@ -10,6 +10,13 @@ const geistSans = Geist({
 export const metadata: Metadata = {
   title: "AI Native 团队协同开发系统",
   description: "面向 AI Native 团队的项目、任务、需求与发布协同开发系统。",
+  icons: {
+    icon: [
+      { url: "/favicon.ico?v=20260828", sizes: "any" },
+      { url: "/icon.png?v=20260828", type: "image/png" },
+    ],
+    shortcut: "/favicon.ico?v=20260828",
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
