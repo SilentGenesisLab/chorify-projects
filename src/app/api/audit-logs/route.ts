@@ -17,7 +17,6 @@ export async function GET(request: NextRequest) {
 
   // JSON metadata is intentionally filtered in application code for compatibility with existing deployments.
   const candidates = await prisma.auditLog.findMany({
-    where: { OR: [{ userId }, { resource: "PROJECT", resourceId: { in: projectIds } }] },
     include: { user: { select: { id: true, name: true, phone: true } } },
     orderBy: { createdAt: "desc" },
     take: 1000,
