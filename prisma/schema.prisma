@@ -19,6 +19,13 @@ enum ProjectRole {
   GUEST
 }
 
+enum TeamRole {
+  OWNER
+  ADMIN
+  MEMBER
+  GUEST
+}
+
 enum Priority {
   LOW
   MEDIUM
@@ -67,11 +74,6 @@ enum ReleaseStatus {
   ROLLED_BACK
 }
 
-enum TokenMode {
-  READ
-  WORK
-}
-
 model User {
   id               String          @id @default(cuid())
   name             String
@@ -80,6 +82,8 @@ model User {
   avatarColor      String          @default("#376ce7")
   systemRole       SystemRole      @default(MEMBER)
   projectMembers   ProjectMember[]
+  teamMembers      TeamMember[]
+  createdInvites   TeamInvite[]    @relation("TeamInviteCreator")
   assignedTasks    Task[]          @relation("TaskAssignee")
   coordinatedTasks Task[]          @relation("TaskCoordinator")
   acceptedTasks    Task[]          @relation("TaskAcceptor")
@@ -89,6 +93,50 @@ model User {
   auditLogs        AuditLog[]
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
+}
+
+model Team {
+  id          String       @id @default(cuid())
+  name        String
+  description String?
+  members     TeamMember[]
+  projects    Project[]
+  invites     TeamInvite[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model TeamMember {
+  id       String   @id @default(cuid())
+  teamId   String
+  userId   String
+  role     TeamRole @default(MEMBER)
+  joinedAt DateTime @default(now())
+  team     Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+  @@index([userId])
+}
+
+model TeamInvite {
+  id          String    @id @default(cuid())
+  teamId      String
+  createdById String
+  role        TeamRole  @default(MEMBER)
+  prefix      String
+  tokenHash   String    @unique
+  expiresAt   DateTime
+  maxUses     Int       @default(50)
+  useCount    Int       @default(0)
+  revokedAt   DateTime?
+  team        Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  createdBy   User      @relation("TeamInviteCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([teamId, createdAt])
+  @@index([createdById, createdAt])
 }
 
 model SmsCode {
@@ -105,23 +153,27 @@ model SmsCode {
 }
 
 model Project {
-  id           String          @id @default(cuid())
-  code         String          @unique
-  name         String
-  description  String
-  status       String          @default("ACTIVE")
-  startDate    DateTime?
-  endDate      DateTime?
-  members      ProjectMember[]
-  requirements Requirement[]
-  tasks        Task[]
-  bugs         Bug[]
-  versions     Version[]
-  releases     Release[]
-  files        FileAsset[]
-  apiTokens    ApiToken[]
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
+  id             String            @id @default(cuid())
+  teamId         String
+  code           String            @unique
+  name           String
+  description    String
+  status         String            @default("ACTIVE")
+  startDate      DateTime?
+  endDate        DateTime?
+  members        ProjectMember[]
+  requirements   Requirement[]
+  tasks          Task[]
+  bugs           Bug[]
+  versions       Version[]
+  releases       Release[]
+  files          FileAsset[]
+  apiTokenScopes ApiTokenProject[]
+  team           Team              @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@index([teamId])
 }
 
 model ProjectMember {
@@ -301,19 +353,32 @@ model ResourceLink {
 }
 
 model ApiToken {
-  id         String    @id @default(cuid())
-  userId     String
-  projectId  String?
-  name       String
-  prefix     String
-  tokenHash  String    @unique
-  mode       TokenMode
-  expiresAt  DateTime?
-  revokedAt  DateTime?
-  lastUsedAt DateTime?
-  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  project    Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  createdAt  DateTime  @default(now())
+  id          String            @id @default(cuid())
+  userId      String
+  name        String
+  prefix      String
+  tokenHash   String            @unique
+  allProjects Boolean           @default(false)
+  permissions String[]
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+  lastUsedAt  DateTime?
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projects    ApiTokenProject[]
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@index([userId, createdAt])
+}
+
+model ApiTokenProject {
+  tokenId   String
+  projectId String
+  token     ApiToken @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@id([tokenId, projectId])
+  @@index([projectId])
 }
 
 model AuditLog {

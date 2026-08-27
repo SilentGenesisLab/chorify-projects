@@ -1,5 +1,6 @@
-import { PrismaClient, Priority, ProjectRole, SystemRole, TaskStatus, VersionStatus } from "@prisma/client";
+import { PrismaClient, Priority, ProjectRole, SystemRole, TaskStatus, TeamRole, VersionStatus } from "@prisma/client";
 import { hash } from "bcryptjs";
+import { createTeamInviteToken } from "../src/lib/security";
 
 const prisma = new PrismaClient();
 
@@ -15,8 +16,11 @@ async function main() {
   await prisma.version.deleteMany();
   await prisma.fileAsset.deleteMany();
   await prisma.projectMember.deleteMany();
+  await prisma.teamInvite.deleteMany();
   await prisma.apiToken.deleteMany();
   await prisma.project.deleteMany();
+  await prisma.teamMember.deleteMany();
+  await prisma.team.deleteMany();
   await prisma.smsCode.deleteMany();
   await prisma.user.deleteMany();
 
@@ -27,8 +31,23 @@ async function main() {
     prisma.user.create({ data: { name: "周青", phone: "13800000003", passwordHash } }),
     prisma.user.create({ data: { name: "苏禾", phone: "13800000004", passwordHash } }),
   ]);
+  const invite = createTeamInviteToken();
+  const team = await prisma.team.create({ data: {
+    name: "Chorify Projects",
+    description: "负责 Chorify 项目协作平台的产品、研发与交付",
+    members: { create: [
+      { userId: chen.id, role: TeamRole.OWNER },
+      { userId: lin.id, role: TeamRole.ADMIN },
+      { userId: zhou.id, role: TeamRole.MEMBER },
+      { userId: su.id, role: TeamRole.MEMBER },
+    ] },
+    invites: { create: {
+      createdById: chen.id, role: TeamRole.MEMBER, prefix: invite.prefix,
+      tokenHash: invite.tokenHash, maxUses: 50, expiresAt: new Date(Date.now() + 7 * 86_400_000),
+    } },
+  } });
   const project = await prisma.project.create({ data: {
-    code: "CP", name: "Chorify Projects", description: "面向真人团队与 Codex 协作的项目工作空间",
+    teamId: team.id, code: "CP", name: "Chorify Projects", description: "面向真人团队与 Codex 协作的项目工作空间",
     startDate: new Date("2026-08-01"), endDate: new Date("2026-09-30"),
     members: { create: [
       { userId: chen.id, role: ProjectRole.OWNER, responsibility: "产品与项目管理" },

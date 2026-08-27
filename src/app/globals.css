@@ -41,3 +41,12 @@ button, a { -webkit-tap-highlight-color: transparent; }
   background: white; padding: 0 16px; outline: none; transition: border-color .15s, box-shadow .15s;
 }
 .field:focus { border-color: #4d7cea; box-shadow: 0 0 0 3px rgba(55,108,231,.1); }
+
+.primary-button, .secondary-button {
+  display: inline-flex; height: 40px; align-items: center; gap: 8px; border-radius: 12px;
+  padding: 0 16px; font-size: 14px; font-weight: 600; transition: background .15s, border-color .15s, color .15s;
+}
+.primary-button { background: #376ce7; color: white; box-shadow: 0 2px 8px rgba(55,108,231,.18); }
+.primary-button:hover { background: #2e60d8; }
+.secondary-button { border: 1px solid #dfe5ee; background: white; color: #526078; }
+.secondary-button:hover { border-color: #bfd0f5; color: #2458ce; }

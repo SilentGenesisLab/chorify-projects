@@ -5,6 +5,9 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { AuthPage } from "@/components/auth-page";
+import { InvitePage } from "@/components/invite-page";
+import { ProjectsPage } from "@/components/projects-page";
+import { TeamManagement } from "@/components/team-management";
 import {
   Activity, AlertTriangle, Bell, Bug, ChevronDown,
   ClipboardCheck, Folder,
@@ -26,7 +29,7 @@ const navigation = [
 const routeTitles: Record<string, string> = {
   dashboard: "仪表盘", projects: "项目管理", files: "文件管理", tasks: "任务中心",
   requirements: "需求管理", bugs: "Bug 管理", versions: "版本与发布",
-  members: "成员与权限", keys: "API Key", logs: "操作日志", login: "登录", register: "注册",
+  teams: "团队管理", keys: "API Key", logs: "操作日志", login: "登录", register: "注册",
 };
 
 const statusStyle: Record<string, string> = {
@@ -50,8 +53,8 @@ function Sidebar({ route, open, onClose, user }: { route: string; open: boolean;
     {open && <button aria-label="关闭导航" onClick={onClose} className="fixed inset-0 z-30 bg-slate-950/20 lg:hidden" />}
     <aside className={`fixed inset-y-0 left-0 z-40 flex w-[248px] flex-col border-r border-[#e1e8f2] bg-white transition-transform lg:translate-x-0 ${open ? "translate-x-0" : "-translate-x-full"}`}>
       <div className="flex h-[72px] items-center gap-3 border-b border-[#edf1f6] px-5">
-        <Image src="/chorify-logo.png" alt="Chorify" width={36} height={36} className="size-9 object-contain"/>
-        <div><div className="text-[17px] font-bold tracking-tight text-[#17223b]">Chorify</div><div className="-mt-0.5 text-[10px] font-semibold tracking-[.18em] text-[#376ce7]">PROJECTS</div></div>
+        <Image src="/chorify-logo.png" alt="AI Native 团队协同开发系统" width={36} height={36} className="size-9 object-contain"/>
+        <div><div className="text-[17px] font-bold tracking-tight text-[#17223b]">AI Native</div><div className="-mt-0.5 text-[10px] font-semibold tracking-[.08em] text-[#376ce7]">团队协同开发系统</div></div>
         <button onClick={onClose} className="ml-auto text-slate-400 lg:hidden"><X size={20}/></button>
       </div>
       <nav className="scrollbar-none flex-1 overflow-y-auto px-3 py-5">
@@ -66,8 +69,8 @@ function Sidebar({ route, open, onClose, user }: { route: string; open: boolean;
           </div>;
         })}
         <p className="mb-2 mt-6 px-3 text-[11px] font-semibold uppercase tracking-[.14em] text-slate-400">系统管理</p>
-        {[{label:"成员与权限", href:"/members", icon:Users},{label:"API Key", href:"/keys", icon:KeyRound},{label:"操作日志", href:"/logs", icon:Activity}].map(item => {
-          const Icon=item.icon; const active=route===item.href.slice(1); return <Link key={item.label} href={item.href} onClick={onClose} className={`mb-1 flex h-10 items-center gap-3 rounded-xl px-3 text-[14px] font-medium ${active ? "bg-[#edf3ff] text-[#2458ce]" : "text-[#5f6c83] hover:bg-slate-50"}`}><Icon size={18}/>{item.label}</Link>;
+        {[{label:"团队管理", href:"/teams", icon:Users},{label:"API Key", href:"/keys", icon:KeyRound},{label:"操作日志", href:"/logs", icon:Activity}].map(item => {
+          const Icon=item.icon; const active=route===item.href.slice(1)||route.startsWith(`${item.href.slice(1)}/`); return <Link key={item.label} href={item.href} onClick={onClose} className={`mb-1 flex h-10 items-center gap-3 rounded-xl px-3 text-[14px] font-medium ${active ? "bg-[#edf3ff] text-[#2458ce]" : "text-[#5f6c83] hover:bg-slate-50"}`}><Icon size={18}/>{item.label}</Link>;
         })}
       </nav>
       <div className="border-t border-[#edf1f6] p-4"><div className="flex items-center gap-3"><Avatar name={user?.name || "用户"}/><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{user?.name || "当前用户"}</p><p className="truncate text-xs text-slate-400">{user?.role || "项目成员"}</p></div><button aria-label="退出登录" title="退出登录" onClick={async()=>{await fetch("/api/auth/logout",{method:"POST"});router.replace("/login");router.refresh();}} className="text-slate-400 hover:text-rose-500"><LogOut size={17}/></button></div></div>
@@ -76,9 +79,10 @@ function Sidebar({ route, open, onClose, user }: { route: string; open: boolean;
 }
 
 function Header({ route, onMenu }: { route: string; onMenu: () => void }) {
+  const rootRoute=route.split("/")[0];
   return <header className="sticky top-0 z-20 flex h-[72px] items-center border-b border-[#e5eaf1] bg-[#f8faff]/90 px-5 backdrop-blur md:px-8">
     <button onClick={onMenu} className="mr-3 text-slate-500 lg:hidden"><Menu size={22}/></button>
-    <div><p className="text-xs text-slate-400">Chorify Projects</p><h1 className="text-[18px] font-semibold tracking-tight">{routeTitles[route] || "项目工作台"}</h1></div>
+    <div><p className="text-xs text-slate-400">AI Native 团队协同开发系统</p><h1 className="text-[18px] font-semibold tracking-tight">{routeTitles[rootRoute] || "项目工作台"}</h1></div>
     <div className="ml-auto hidden w-[260px] items-center gap-2 rounded-xl border border-[#e3e9f2] bg-white px-3 py-2 text-sm text-slate-400 md:flex"><Search size={16}/><span>搜索任务、项目或文件</span><kbd className="ml-auto rounded border px-1.5 py-0.5 text-[10px]">⌘ K</kbd></div>
     <button aria-label="通知" className="relative ml-3 grid size-10 place-items-center rounded-xl border border-[#e3e9f2] bg-white text-slate-500"><Bell size={18}/><i className="absolute right-2 top-2 size-1.5 rounded-full bg-rose-500"/></button>
   </header>;
@@ -111,7 +115,7 @@ function TaskTable({ compact=false }: { compact?: boolean }) {
 
 function GenericPage({ route }: { route: string }) {
   const config: Record<string,{subtitle:string; action:string; icon:typeof Folder}> = {
-    projects:{subtitle:"集中查看项目进度、成员与交付计划",action:"新建项目",icon:Layers3}, files:{subtitle:"统一归档并在任务、需求和版本中引用",action:"上传文件",icon:Folder}, tasks:{subtitle:"跟踪任务分工、依赖、提交与验收",action:"新建任务",icon:ListChecks}, requirements:{subtitle:"从业务目标到任务交付保持完整关联",action:"新建需求",icon:Target}, bugs:{subtitle:"跟踪问题从提出、修复、验证到上线",action:"提交 Bug",icon:Bug}, versions:{subtitle:"规划项目版本范围并记录每次发布",action:"新建版本",icon:Rocket}, members:{subtitle:"管理真人成员、项目角色与访问权限",action:"邀请成员",icon:Users}, keys:{subtitle:"授权 Codex 以当前真人用户身份读取和提交工作",action:"创建 API Key",icon:KeyRound}, logs:{subtitle:"查看项目关键变更与 API 操作记录",action:"导出日志",icon:Activity}
+    projects:{subtitle:"集中查看项目进度、成员与交付计划",action:"新建项目",icon:Layers3}, files:{subtitle:"统一归档并在任务、需求和版本中引用",action:"上传文件",icon:Folder}, tasks:{subtitle:"跟踪任务分工、依赖、提交与验收",action:"新建任务",icon:ListChecks}, requirements:{subtitle:"从业务目标到任务交付保持完整关联",action:"新建需求",icon:Target}, bugs:{subtitle:"跟踪问题从提出、修复、验证到上线",action:"提交 Bug",icon:Bug}, versions:{subtitle:"规划项目版本范围并记录每次发布",action:"新建版本",icon:Rocket}, keys:{subtitle:"授权 Codex 以当前真人用户身份读取和提交工作",action:"创建 API Key",icon:KeyRound}, logs:{subtitle:"查看项目关键变更与 API 操作记录",action:"导出日志",icon:Activity}
   };
   const c=config[route]||config.projects; const Icon=c.icon;
   if(route==="tasks") return <div className="space-y-5"><PageTitle title="任务中心" subtitle={c.subtitle} action={c.action}/><Filters/><div className="card overflow-hidden"><TaskTable/></div></div>;
@@ -122,7 +126,9 @@ function GenericPage({ route }: { route: string }) {
 function PageTitle({title,subtitle,action}:{title:string;subtitle:string;action:string}) { return <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><h2 className="text-2xl font-bold tracking-tight">{title}</h2><p className="mt-1 text-sm text-slate-500">{subtitle}</p></div><button className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-[#376ce7] px-4 text-sm font-semibold text-white"><Plus size={17}/>{action}</button></div> }
 function Filters(){return <div className="flex flex-wrap items-center gap-2"><div className="flex h-10 min-w-[220px] items-center gap-2 rounded-xl border border-[#e3e9f2] bg-white px-3 text-sm text-slate-400"><Search size={16}/>搜索当前列表</div>{["全部项目","全部状态","负责人"].map(x=><button key={x} className="flex h-10 items-center gap-2 rounded-xl border border-[#e3e9f2] bg-white px-3 text-sm text-slate-500">{x}<ChevronDown size={14}/></button>)}</div>}
 
-export function ChorifyApp({ route, user }: { route: string; user?: { name: string; role: string } }) {
-  const [open,setOpen]=useState(false); if(route==="login" || route==="register") return <AuthPage page={route}/>;
-  return <div className="min-h-screen bg-[#f4f7fb] text-[#17223b]"><Sidebar route={route} open={open} onClose={()=>setOpen(false)} user={user}/><div className="lg:pl-[248px]"><Header route={route} onMenu={()=>setOpen(true)}/><main className="mx-auto max-w-[1480px] p-5 md:p-8">{route==="dashboard"?<Dashboard/>:<GenericPage route={route}/>}</main></div></div>;
+export function ChorifyApp({ route, user, nextPath = "" }: { route: string; user?: { name: string; role: string }; nextPath?: string }) {
+  const [open,setOpen]=useState(false); if(route==="login" || route==="register") return <AuthPage page={route} nextPath={nextPath}/>;
+  if(route.startsWith("invite/")) return <InvitePage token={route.slice(7)}/>;
+  const [rootRoute,detailId]=route.split("/");
+  return <div className="min-h-screen bg-[#f4f7fb] text-[#17223b]"><Sidebar route={route} open={open} onClose={()=>setOpen(false)} user={user}/><div className="lg:pl-[248px]"><Header route={route} onMenu={()=>setOpen(true)}/><main className="mx-auto max-w-[1480px] p-5 md:p-8">{route==="dashboard"?<Dashboard/>:rootRoute==="teams"?<TeamManagement teamId={detailId}/>:rootRoute==="projects"?<ProjectsPage/>:<GenericPage route={rootRoute}/>}</main></div></div>;
 }

@@ -8,8 +8,8 @@ const geistSans = Geist({
 });
 
 export const metadata: Metadata = {
-  title: "Chorify Projects",
-  description: "让项目、任务、需求与发布保持在同一节奏。",
+  title: "AI Native 团队协同开发系统",
+  description: "面向 AI Native 团队的项目、任务、需求与发布协同开发系统。",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

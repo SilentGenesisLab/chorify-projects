@@ -6,3 +6,8 @@ export const createPersonalToken = () => {
   const token = `chp_${secret}`;
   return { token, prefix: token.slice(0, 12), tokenHash: sha256(token) };
 };
+
+export const createTeamInviteToken = () => {
+  const token = `cht_${randomBytes(32).toString("base64url")}`;
+  return { token, prefix: token.slice(0, 12), tokenHash: sha256(token) };
+};

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createPersonalToken, sha256 } from "./security";
+import { createPersonalToken, createTeamInviteToken, sha256 } from "./security";
 
 describe("personal API token", () => {
   it("creates a display-once token and stable hash", () => {
@@ -10,4 +10,14 @@ describe("personal API token", () => {
     expect(result.tokenHash).not.toContain(result.token);
   });
   it("creates unique credentials", () => expect(createPersonalToken().token).not.toBe(createPersonalToken().token));
+});
+
+describe("team invitation token", () => {
+  it("creates a display-once token and stores only its hash", () => {
+    const result = createTeamInviteToken();
+    expect(result.token).toMatch(/^cht_[A-Za-z0-9_-]+$/);
+    expect(result.prefix).toBe(result.token.slice(0, 12));
+    expect(result.tokenHash).toBe(sha256(result.token));
+    expect(result.tokenHash).not.toContain(result.token);
+  });
 });

@@ -4,9 +4,15 @@ import { SESSION_COOKIE, verifySessionToken } from "@/lib/session";
 const PUBLIC_PAGES = new Set(["/login", "/register"]);
 const PUBLIC_API_PREFIXES = ["/api/auth/", "/api/health", "/api/v1/"];
 
+function safeNext(value: string | null) {
+  return value?.startsWith("/") && !value.startsWith("//") ? value : null;
+}
+
 export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
-  const isPublic = PUBLIC_PAGES.has(pathname) || PUBLIC_API_PREFIXES.some((prefix) => pathname.startsWith(prefix));
+  if (pathname === "/members" || pathname.startsWith("/members/")) return NextResponse.redirect(new URL(pathname.replace(/^\/members/, "/teams"), request.url), 308);
+  const isInvitePage = pathname.startsWith("/invite/");
+  const isPublic = PUBLIC_PAGES.has(pathname) || isInvitePage || pathname.startsWith("/api/invites/") || PUBLIC_API_PREFIXES.some((prefix) => pathname.startsWith(prefix));
   const userId = await verifySessionToken(request.cookies.get(SESSION_COOKIE)?.value);
 
   if (!userId && !isPublic) {
@@ -15,7 +21,7 @@ export async function proxy(request: NextRequest) {
     login.searchParams.set("next", `${pathname}${search}`);
     return NextResponse.redirect(login);
   }
-  if (userId && PUBLIC_PAGES.has(pathname)) return NextResponse.redirect(new URL("/", request.url));
+  if (userId && PUBLIC_PAGES.has(pathname)) return NextResponse.redirect(new URL(safeNext(request.nextUrl.searchParams.get("next")) || "/", request.url));
   return NextResponse.next();
 }
 

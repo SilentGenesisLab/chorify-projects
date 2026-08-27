@@ -1,4 +1,4 @@
-# Chorify Projects
+# AI Native 团队协同开发系统
 
 面向真人团队与 Codex 辅助工作的项目协作原型。包含项目、需求、任务、Bug、版本、文件引用、权限和个人 API Key。
 
