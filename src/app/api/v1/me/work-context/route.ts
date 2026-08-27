@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { authenticateApi } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
+import { auditApiCall } from "@/lib/api-audit";
 
 export async function GET(request: Request) {
   const auth = await authenticateApi(request, "task:read");
@@ -12,5 +13,6 @@ export async function GET(request: Request) {
     include: { project: { select: { code: true, name: true } }, coordinator: { select: { id: true, name: true } }, acceptor: { select: { id: true, name: true } }, dependencies: { include: { dependsOn: { select: { code: true, title: true, status: true } } } }, version: { select: { name: true } } },
     orderBy: [{ dueAt: "asc" }, { priority: "desc" }],
   });
+  await auditApiCall({ auth, action: "READ_WORK_CONTEXT", resource: "TASK", request, details: { taskCount: tasks.length, projectCount: scopedIds.length } });
   return NextResponse.json({ user: { id: auth.user.id, name: auth.user.name }, generatedAt: new Date(), tasks });
 }

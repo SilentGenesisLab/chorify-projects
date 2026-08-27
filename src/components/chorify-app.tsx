@@ -9,6 +9,7 @@ import { InvitePage } from "@/components/invite-page";
 import { ProjectsPage } from "@/components/projects-page";
 import { TeamManagement } from "@/components/team-management";
 import { ApiKeyPage } from "@/components/api-key-page";
+import { AuditLogPage } from "@/components/audit-log-page";
 import {
   Activity,
   AlertTriangle,
@@ -756,6 +757,8 @@ export function ChorifyApp({
             <ProjectsPage projectId={detailId} section={projectSection} />
           ) : rootRoute === "keys" ? (
             <ApiKeyPage />
+          ) : rootRoute === "logs" ? (
+            <AuditLogPage />
           ) : (
             <GenericPage route={rootRoute} />
           )}

@@ -14,7 +14,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tas
   const [report] = await prisma.$transaction([
     prisma.workReport.create({ data: { taskId, authorId: auth.userId, ...parsed.data } }),
     prisma.task.update({ where: { id: taskId }, data: { status: "PENDING_ACCEPTANCE" } }),
-    prisma.auditLog.create({ data: { userId: auth.userId, actorType: "USER", action: "SUBMIT_REPORT", resource: "TASK", resourceId: taskId, channel: "CODEX_API", metadata: { tokenId: auth.id, projectId: task.projectId } } }),
+    prisma.auditLog.create({ data: { userId: auth.userId, actorType: "USER", action: "SUBMIT_REPORT", resource: "TASK", resourceId: taskId, channel: "API_KEY", metadata: { tokenId: auth.id, tokenName: auth.name, tokenPrefix: auth.prefix, projectId: task.projectId, result: "SUCCESS", requestMethod: request.method, requestPath: new URL(request.url).pathname } } }),
   ]);
   return NextResponse.json(report, { status: 201 });
 }
