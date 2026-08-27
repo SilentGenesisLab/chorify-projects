@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE, verifySessionToken } from "@/lib/session";
 
 const PUBLIC_PAGES = new Set(["/login", "/register"]);
-const PUBLIC_API_PREFIXES = ["/api/auth/", "/api/health", "/api/v1/"];
+const PUBLIC_API_PREFIXES = ["/api/auth/", "/api/health", "/api/v1/", "/api/files"];
 
 function safeNext(value: string | null) {
   return value?.startsWith("/") && !value.startsWith("//") ? value : null;

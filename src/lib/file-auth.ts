@@ -1,15 +1,19 @@
 import { prisma } from "@/lib/prisma";
 import { authenticatedUserId } from "@/lib/web-auth";
 import { statfs } from "node:fs/promises";
+import { authenticateApi } from "@/lib/api-auth";
+import type { ApiTokenPermission } from "@/lib/api-token-permissions";
 
 export { MAX_FILE_SIZE, STORAGE_LIMIT, STORAGE_WARNING, STORAGE_UPLOAD_STOP, folderMoveCreatesCycle, uploadFitsQuota } from "@/lib/file-rules";
 
-export async function fileUser(request: Request) {
+export async function fileUser(request: Request, apiPermission?: ApiTokenPermission) {
   const userId = await authenticatedUserId(request);
-  if (!userId) return null;
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, systemRole: true } });
-  return user;
+  if (userId) { const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, systemRole: true } }); return user ? { ...user, apiToken: null } : null; }
+  if (!apiPermission) return null;
+  const auth = await authenticateApi(request, apiPermission);
+  return auth ? { id: auth.userId, systemRole: auth.user.systemRole, apiToken: auth } : null;
 }
+export function apiTokenAllowsProject(user: NonNullable<Awaited<ReturnType<typeof fileUser>>>, projectId: string) { return !user.apiToken || user.apiToken.allProjects || user.apiToken.projects.some((scope) => scope.projectId === projectId); }
 
 export async function projectFileAccess(userId: string, projectId: string) {
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { systemRole: true } });

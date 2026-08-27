@@ -1,14 +1,15 @@
 import { NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { fileUser, jsonBigInt, storageUsage, STORAGE_LIMIT, STORAGE_UPLOAD_STOP, STORAGE_WARNING } from "@/lib/file-auth";
+import { apiTokenAllowsProject, fileUser, jsonBigInt, storageUsage, STORAGE_LIMIT, STORAGE_UPLOAD_STOP, STORAGE_WARNING } from "@/lib/file-auth";
 
 export async function GET(request: Request) {
-  const user = await fileUser(request);
+  const user = await fileUser(request, "file:read");
   if (!user) return NextResponse.json({ error: "请先登录" }, { status: 401 });
   const url = new URL(request.url), projectId = url.searchParams.get("projectId"), folderId = url.searchParams.get("folderId"), trash = url.searchParams.get("trash") === "1";
   const access: Prisma.ProjectWhereInput = { OR: [{ members: { some: { userId: user.id } } }, { team: { members: { some: { userId: user.id, role: { in: ["OWNER", "ADMIN"] } } } } }] };
-  const projects = await prisma.project.findMany({ where: access, select: { id: true, name: true, code: true }, orderBy: { name: "asc" } });
+  const visibleProjects = await prisma.project.findMany({ where: access, select: { id: true, name: true, code: true }, orderBy: { name: "asc" } });
+  const projects = visibleProjects.filter((project) => apiTokenAllowsProject(user, project.id));
   const allowed = new Set(projects.map((project) => project.id));
   if (projectId && !allowed.has(projectId)) return NextResponse.json({ error: "没有项目文件访问权限" }, { status: 403 });
   const projectIds = projectId ? [projectId] : [...allowed];
