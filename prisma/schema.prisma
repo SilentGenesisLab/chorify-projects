@@ -1,0 +1,332 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum SystemRole {
+  ADMIN
+  MEMBER
+}
+
+enum ProjectRole {
+  OWNER
+  MANAGER
+  MEMBER
+  GUEST
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  PENDING_ACCEPTANCE
+  NEEDS_CHANGES
+  ACCEPTED
+  DONE
+}
+
+enum BugStatus {
+  NEW
+  CONFIRMED
+  ASSIGNED
+  FIXING
+  PENDING_VERIFICATION
+  VERIFIED
+  PENDING_RELEASE
+  CLOSED
+  REOPENED
+  DEFERRED
+  REJECTED
+}
+
+enum VersionStatus {
+  PLANNING
+  DEVELOPING
+  TESTING
+  PENDING_RELEASE
+  RELEASED
+  ARCHIVED
+  CANCELLED
+}
+
+enum ReleaseStatus {
+  PLANNED
+  RUNNING
+  SUCCEEDED
+  FAILED
+  ROLLED_BACK
+}
+
+enum TokenMode {
+  READ
+  WORK
+}
+
+model User {
+  id               String          @id @default(cuid())
+  name             String
+  phone            String          @unique
+  passwordHash     String
+  avatarColor      String          @default("#376ce7")
+  systemRole       SystemRole      @default(MEMBER)
+  projectMembers   ProjectMember[]
+  assignedTasks    Task[]          @relation("TaskAssignee")
+  coordinatedTasks Task[]          @relation("TaskCoordinator")
+  acceptedTasks    Task[]          @relation("TaskAcceptor")
+  reports          WorkReport[]
+  acceptances      Acceptance[]
+  apiTokens        ApiToken[]
+  auditLogs        AuditLog[]
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+}
+
+model SmsCode {
+  id        String    @id @default(cuid())
+  phone     String
+  codeHash  String
+  ip        String
+  usedAt    DateTime?
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+
+  @@index([phone, createdAt])
+  @@index([ip, createdAt])
+}
+
+model Project {
+  id           String          @id @default(cuid())
+  code         String          @unique
+  name         String
+  description  String
+  status       String          @default("ACTIVE")
+  startDate    DateTime?
+  endDate      DateTime?
+  members      ProjectMember[]
+  requirements Requirement[]
+  tasks        Task[]
+  bugs         Bug[]
+  versions     Version[]
+  releases     Release[]
+  files        FileAsset[]
+  apiTokens    ApiToken[]
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+}
+
+model ProjectMember {
+  id             String      @id @default(cuid())
+  projectId      String
+  userId         String
+  role           ProjectRole
+  responsibility String?
+  project        Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+}
+
+model Requirement {
+  id                 String   @id @default(cuid())
+  code               String   @unique
+  projectId          String
+  title              String
+  description        String
+  acceptanceCriteria String
+  priority           Priority
+  status             String
+  targetVersionId    String?
+  project            Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  targetVersion      Version? @relation(fields: [targetVersionId], references: [id])
+  tasks              Task[]
+  bugs               Bug[]
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model Task {
+  id                 String           @id @default(cuid())
+  code               String           @unique
+  projectId          String
+  requirementId      String?
+  versionId          String?
+  title              String
+  description        String
+  acceptanceCriteria String
+  priority           Priority
+  status             TaskStatus       @default(TODO)
+  dueAt              DateTime?
+  assigneeId         String?
+  coordinatorId      String?
+  acceptorId         String?
+  project            Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  requirement        Requirement?     @relation(fields: [requirementId], references: [id])
+  version            Version?         @relation(fields: [versionId], references: [id])
+  assignee           User?            @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  coordinator        User?            @relation("TaskCoordinator", fields: [coordinatorId], references: [id])
+  acceptor           User?            @relation("TaskAcceptor", fields: [acceptorId], references: [id])
+  dependencies       TaskDependency[] @relation("TaskDependencies")
+  dependents         TaskDependency[] @relation("TaskDependents")
+  reports            WorkReport[]
+  acceptances        Acceptance[]
+  bugs               Bug[]
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  @@index([projectId, status])
+  @@index([assigneeId, status])
+}
+
+model TaskDependency {
+  taskId      String
+  dependsOnId String
+  task        Task   @relation("TaskDependencies", fields: [taskId], references: [id], onDelete: Cascade)
+  dependsOn   Task   @relation("TaskDependents", fields: [dependsOnId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, dependsOnId])
+}
+
+model WorkReport {
+  id              String   @id @default(cuid())
+  taskId          String
+  authorId        String
+  summary         String
+  completedItems  Json
+  verification    String
+  remainingIssues Json
+  needsSupport    Json
+  task            Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  author          User     @relation(fields: [authorId], references: [id])
+  createdAt       DateTime @default(now())
+}
+
+model Acceptance {
+  id         String   @id @default(cuid())
+  taskId     String
+  reviewerId String
+  result     String
+  comment    String
+  task       Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  reviewer   User     @relation(fields: [reviewerId], references: [id])
+  createdAt  DateTime @default(now())
+}
+
+model Bug {
+  id             String       @id @default(cuid())
+  code           String       @unique
+  projectId      String
+  requirementId  String?
+  taskId         String?
+  foundVersionId String?
+  fixedVersionId String?
+  title          String
+  description    String
+  reproduceSteps String
+  severity       Priority
+  status         BugStatus    @default(NEW)
+  project        Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  requirement    Requirement? @relation(fields: [requirementId], references: [id])
+  task           Task?        @relation(fields: [taskId], references: [id])
+  foundVersion   Version?     @relation("FoundVersion", fields: [foundVersionId], references: [id])
+  fixedVersion   Version?     @relation("FixedVersion", fields: [fixedVersionId], references: [id])
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+}
+
+model Version {
+  id           String        @id @default(cuid())
+  projectId    String
+  name         String
+  goal         String
+  status       VersionStatus @default(PLANNING)
+  plannedAt    DateTime?
+  project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  requirements Requirement[]
+  tasks        Task[]
+  foundBugs    Bug[]         @relation("FoundVersion")
+  fixedBugs    Bug[]         @relation("FixedVersion")
+  releases     Release[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@unique([projectId, name])
+}
+
+model Release {
+  id           String        @id @default(cuid())
+  projectId    String
+  versionId    String
+  build        String
+  environment  String
+  notes        String
+  rollbackPlan String
+  status       ReleaseStatus @default(PLANNED)
+  releasedAt   DateTime?
+  project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  version      Version       @relation(fields: [versionId], references: [id])
+  createdAt    DateTime      @default(now())
+}
+
+model FileAsset {
+  id         String         @id @default(cuid())
+  projectId  String
+  name       String
+  mimeType   String
+  size       Int
+  storageKey String?
+  tags       String[]
+  project    Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  links      ResourceLink[]
+  createdAt  DateTime       @default(now())
+}
+
+model ResourceLink {
+  id           String    @id @default(cuid())
+  fileId       String
+  resourceType String
+  resourceId   String
+  file         FileAsset @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@index([resourceType, resourceId])
+}
+
+model ApiToken {
+  id         String    @id @default(cuid())
+  userId     String
+  projectId  String?
+  name       String
+  prefix     String
+  tokenHash  String    @unique
+  mode       TokenMode
+  expiresAt  DateTime?
+  revokedAt  DateTime?
+  lastUsedAt DateTime?
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project    Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdAt  DateTime  @default(now())
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  actorType  String
+  action     String
+  resource   String
+  resourceId String?
+  channel    String
+  metadata   Json?
+  user       User?    @relation(fields: [userId], references: [id])
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+}

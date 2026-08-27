@@ -1,0 +1,18 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: chorify
+      POSTGRES_PASSWORD: chorify
+      POSTGRES_DB: chorify_projects
+    ports:
+      - "127.0.0.1:54329:5432"
+    volumes:
+      - chorify_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chorify -d chorify_projects"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+volumes:
+  chorify_pg_data:

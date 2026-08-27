@@ -1,0 +1,49 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: chorify
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: chorify_projects
+    volumes:
+      - chorify_staging_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chorify -d chorify_projects"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  migrate:
+    build:
+      context: ..
+      target: builder
+    environment:
+      DATABASE_URL: postgresql://chorify:${POSTGRES_PASSWORD}@postgres:5432/chorify_projects?schema=public
+    command: ["npx", "prisma", "migrate", "deploy"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  app:
+    build:
+      context: ..
+      target: runner
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://chorify:${POSTGRES_PASSWORD}@postgres:5432/chorify_projects?schema=public
+      AUTH_SECRET: ${AUTH_SECRET}
+      ALIYUN_SMS_ACCESS_KEY_ID: ${ALIYUN_SMS_ACCESS_KEY_ID:-}
+      ALIYUN_SMS_ACCESS_KEY_SECRET: ${ALIYUN_SMS_ACCESS_KEY_SECRET:-}
+      ALIYUN_SMS_SIGN_NAME: ${ALIYUN_SMS_SIGN_NAME:-}
+      ALIYUN_SMS_TEMPLATE_CODE: ${ALIYUN_SMS_TEMPLATE_CODE:-}
+      ALIYUN_SMS_REGION_ID: ${ALIYUN_SMS_REGION_ID:-cn-hangzhou}
+    ports:
+      - "127.0.0.1:3308:3000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  chorify_staging_pg:
