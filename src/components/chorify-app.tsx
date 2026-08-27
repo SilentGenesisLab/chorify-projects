@@ -1,12 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { AuthPage } from "@/components/auth-page";
 import {
   Activity, AlertTriangle, Bell, Bug, ChevronDown,
   ClipboardCheck, Folder,
   KeyRound, Layers3, LayoutDashboard, ListChecks, Menu,
-  MoreHorizontal, Plus, Rocket, Search, Settings, Sparkles,
+  MoreHorizontal, Plus, Rocket, Search, Sparkles, LogOut,
   Target, Users, X
 } from "lucide-react";
 
@@ -23,7 +25,7 @@ const navigation = [
 const routeTitles: Record<string, string> = {
   dashboard: "仪表盘", projects: "项目管理", files: "文件管理", tasks: "任务中心",
   requirements: "需求管理", bugs: "Bug 管理", versions: "版本与发布",
-  members: "成员与权限", keys: "API Key", logs: "操作日志", login: "登录",
+  members: "成员与权限", keys: "API Key", logs: "操作日志", login: "登录", register: "注册",
 };
 
 const statusStyle: Record<string, string> = {
@@ -41,7 +43,8 @@ function Avatar({ name, color = "bg-blue-600" }: { name: string; color?: string 
   return <span className={`inline-grid size-8 shrink-0 place-items-center rounded-full ${color} text-xs font-semibold text-white ring-2 ring-white`}>{name.slice(-1)}</span>;
 }
 
-function Sidebar({ route, open, onClose }: { route: string; open: boolean; onClose: () => void }) {
+function Sidebar({ route, open, onClose, user }: { route: string; open: boolean; onClose: () => void; user?: { name: string; role: string } }) {
+  const router = useRouter();
   return <>
     {open && <button aria-label="关闭导航" onClick={onClose} className="fixed inset-0 z-30 bg-slate-950/20 lg:hidden" />}
     <aside className={`fixed inset-y-0 left-0 z-40 flex w-[248px] flex-col border-r border-[#e1e8f2] bg-white transition-transform lg:translate-x-0 ${open ? "translate-x-0" : "-translate-x-full"}`}>
@@ -66,7 +69,7 @@ function Sidebar({ route, open, onClose }: { route: string; open: boolean; onClo
           const Icon=item.icon; const active=route===item.href.slice(1); return <Link key={item.label} href={item.href} onClick={onClose} className={`mb-1 flex h-10 items-center gap-3 rounded-xl px-3 text-[14px] font-medium ${active ? "bg-[#edf3ff] text-[#2458ce]" : "text-[#5f6c83] hover:bg-slate-50"}`}><Icon size={18}/>{item.label}</Link>;
         })}
       </nav>
-      <div className="border-t border-[#edf1f6] p-4"><div className="flex items-center gap-3"><Avatar name="陈默"/><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">陈默</p><p className="truncate text-xs text-slate-400">项目管理员</p></div><Settings size={17} className="text-slate-400"/></div></div>
+      <div className="border-t border-[#edf1f6] p-4"><div className="flex items-center gap-3"><Avatar name={user?.name || "用户"}/><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{user?.name || "当前用户"}</p><p className="truncate text-xs text-slate-400">{user?.role || "项目成员"}</p></div><button aria-label="退出登录" title="退出登录" onClick={async()=>{await fetch("/api/auth/logout",{method:"POST"});router.replace("/login");router.refresh();}} className="text-slate-400 hover:text-rose-500"><LogOut size={17}/></button></div></div>
     </aside>
   </>;
 }
@@ -118,9 +121,7 @@ function GenericPage({ route }: { route: string }) {
 function PageTitle({title,subtitle,action}:{title:string;subtitle:string;action:string}) { return <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><h2 className="text-2xl font-bold tracking-tight">{title}</h2><p className="mt-1 text-sm text-slate-500">{subtitle}</p></div><button className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-[#376ce7] px-4 text-sm font-semibold text-white"><Plus size={17}/>{action}</button></div> }
 function Filters(){return <div className="flex flex-wrap items-center gap-2"><div className="flex h-10 min-w-[220px] items-center gap-2 rounded-xl border border-[#e3e9f2] bg-white px-3 text-sm text-slate-400"><Search size={16}/>搜索当前列表</div>{["全部项目","全部状态","负责人"].map(x=><button key={x} className="flex h-10 items-center gap-2 rounded-xl border border-[#e3e9f2] bg-white px-3 text-sm text-slate-500">{x}<ChevronDown size={14}/></button>)}</div>}
 
-function Login(){const [mode,setMode]=useState<"password"|"code">("password");return <main className="grid min-h-screen bg-[#f4f7fb] lg:grid-cols-[1.05fr_.95fr]"><section className="relative hidden overflow-hidden bg-[#173f9f] p-12 text-white lg:flex lg:flex-col"><div className="flex items-center gap-3"><div className="grid size-10 place-items-center rounded-xl bg-white/15"><Sparkles size={21}/></div><div className="font-bold">Chorify Projects</div></div><div className="my-auto max-w-lg"><p className="mb-5 text-sm font-semibold tracking-[.18em] text-blue-200">PROJECT WORKSPACE</p><h1 className="text-4xl font-bold leading-tight">让每一次协作，<br/>都有清晰的上下文。</h1><p className="mt-5 max-w-md leading-7 text-blue-100/75">统一管理项目、任务、需求、Bug 与发布。真人负责决策，Codex 在你的授权下完成整理与提交。</p></div><p className="text-xs text-blue-200/60">© 2026 Chorify Projects</p></section><section className="flex items-center justify-center p-6"><div className="w-full max-w-[420px]"><div className="mb-8 lg:hidden"><b>Chorify Projects</b></div><p className="text-sm text-blue-600">欢迎回来</p><h2 className="mt-2 text-3xl font-bold">登录工作空间</h2><p className="mt-2 text-sm text-slate-500">使用手机号继续访问你的项目</p><div className="mt-8 flex rounded-xl bg-slate-100 p-1">{([["password","账户密码"],["code","手机验证码"]] as const).map(([k,l])=><button key={k} onClick={()=>setMode(k)} className={`h-10 flex-1 rounded-lg text-sm font-medium ${mode===k?"bg-white text-slate-900 shadow-sm":"text-slate-500"}`}>{l}</button>)}</div><label className="mt-6 block text-sm font-medium">手机号</label><input className="mt-2 h-12 w-full rounded-xl border border-slate-200 bg-white px-4 outline-none focus:border-blue-500" placeholder="请输入手机号"/><label className="mt-5 block text-sm font-medium">{mode==="password"?"密码":"验证码"}</label><div className="relative mt-2"><input type={mode==="password"?"password":"text"} className="h-12 w-full rounded-xl border border-slate-200 bg-white px-4 outline-none focus:border-blue-500" placeholder={mode==="password"?"请输入密码":"请输入 6 位验证码"}/>{mode==="code"&&<button className="absolute right-3 top-3 text-sm font-medium text-blue-600">获取验证码</button>}</div><Link href="/" className="mt-7 flex h-12 items-center justify-center rounded-xl bg-[#376ce7] font-semibold text-white">登录</Link><p className="mt-6 text-center text-xs text-slate-400">登录即代表你同意服务条款与隐私政策</p></div></section></main>}
-
-export function ChorifyApp({ route }: { route: string }) {
-  const [open,setOpen]=useState(false); if(route==="login") return <Login/>;
-  return <div className="min-h-screen bg-[#f4f7fb] text-[#17223b]"><Sidebar route={route} open={open} onClose={()=>setOpen(false)}/><div className="lg:pl-[248px]"><Header route={route} onMenu={()=>setOpen(true)}/><main className="mx-auto max-w-[1480px] p-5 md:p-8">{route==="dashboard"?<Dashboard/>:<GenericPage route={route}/>}</main></div></div>;
+export function ChorifyApp({ route, user }: { route: string; user?: { name: string; role: string } }) {
+  const [open,setOpen]=useState(false); if(route==="login" || route==="register") return <AuthPage page={route}/>;
+  return <div className="min-h-screen bg-[#f4f7fb] text-[#17223b]"><Sidebar route={route} open={open} onClose={()=>setOpen(false)} user={user}/><div className="lg:pl-[248px]"><Header route={route} onMenu={()=>setOpen(true)}/><main className="mx-auto max-w-[1480px] p-5 md:p-8">{route==="dashboard"?<Dashboard/>:<GenericPage route={route}/>}</main></div></div>;
 }
