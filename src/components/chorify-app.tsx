@@ -92,11 +92,12 @@ function Avatar({
   name: string;
   color?: string;
 }) {
+  const initial = Array.from(name.trim())[0]?.toLocaleUpperCase() || "用";
   return (
     <span
       className={`inline-grid size-8 shrink-0 place-items-center rounded-full ${color} text-xs font-semibold text-white ring-2 ring-white`}
     >
-      {name.slice(-1)}
+      {initial}
     </span>
   );
 }
