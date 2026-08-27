@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createTeamInviteToken, encryptTeamInviteToken } from "@/lib/security";
+import { getAppOrigin } from "@/lib/app-url";
 import { getRequestUserId, getTeamMembership, isRateLimited } from "@/lib/team-permissions";
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ teamId: string; inviteId: string }> }) {
@@ -19,5 +20,5 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     await tx.auditLog.create({ data: { userId, actorType: "USER", action: "RESET_TEAM_INVITE", resource: "TEAM_INVITE", resourceId: inviteId, channel: "WEB", metadata: { teamId } } });
     return updated;
   });
-  return NextResponse.json({ invite: { id: invite.id, token: token.token, url: `${request.nextUrl.origin}/invite/${token.token}`, prefix: invite.prefix, expiresAt: invite.expiresAt, maxUses: invite.maxUses, useCount: invite.useCount, role: invite.role } });
+  return NextResponse.json({ invite: { id: invite.id, token: token.token, url: `${getAppOrigin(request)}/invite/${token.token}`, prefix: invite.prefix, expiresAt: invite.expiresAt, maxUses: invite.maxUses, useCount: invite.useCount, role: invite.role } });
 }

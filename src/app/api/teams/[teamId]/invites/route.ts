@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { createTeamInviteToken, encryptTeamInviteToken } from "@/lib/security";
+import { getAppOrigin } from "@/lib/app-url";
 import { getRequestUserId, getTeamMembership, isRateLimited, TEAM_ROLE_LABELS } from "@/lib/team-permissions";
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ teamId: string }> }) {
@@ -20,5 +21,5 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     await tx.auditLog.create({ data: { userId, actorType: "USER", action: "CREATE_TEAM_INVITE", resource: "TEAM_INVITE", resourceId: created.id, channel: "WEB", metadata: { teamId, role: created.role, maxUses: created.maxUses } } });
     return created;
   });
-  return NextResponse.json({ invite: { id: invite.id, token: token.token, url: `${request.nextUrl.origin}/invite/${token.token}`, prefix: invite.prefix, role: invite.role, roleLabel: TEAM_ROLE_LABELS[invite.role], maxUses: invite.maxUses, useCount: 0, expiresAt: invite.expiresAt } }, { status: 201 });
+  return NextResponse.json({ invite: { id: invite.id, token: token.token, url: `${getAppOrigin(request)}/invite/${token.token}`, prefix: invite.prefix, role: invite.role, roleLabel: TEAM_ROLE_LABELS[invite.role], maxUses: invite.maxUses, useCount: 0, expiresAt: invite.expiresAt } }, { status: 201 });
 }
