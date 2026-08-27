@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { AuthPage } from "@/components/auth-page";
@@ -8,7 +9,7 @@ import {
   Activity, AlertTriangle, Bell, Bug, ChevronDown,
   ClipboardCheck, Folder,
   KeyRound, Layers3, LayoutDashboard, ListChecks, Menu,
-  MoreHorizontal, Plus, Rocket, Search, Sparkles, LogOut,
+  MoreHorizontal, Plus, Rocket, Search, LogOut,
   Target, Users, X
 } from "lucide-react";
 
@@ -49,7 +50,7 @@ function Sidebar({ route, open, onClose, user }: { route: string; open: boolean;
     {open && <button aria-label="关闭导航" onClick={onClose} className="fixed inset-0 z-30 bg-slate-950/20 lg:hidden" />}
     <aside className={`fixed inset-y-0 left-0 z-40 flex w-[248px] flex-col border-r border-[#e1e8f2] bg-white transition-transform lg:translate-x-0 ${open ? "translate-x-0" : "-translate-x-full"}`}>
       <div className="flex h-[72px] items-center gap-3 border-b border-[#edf1f6] px-5">
-        <div className="relative grid size-9 place-items-center overflow-hidden rounded-xl bg-[#376ce7] text-white"><Sparkles size={20}/></div>
+        <Image src="/chorify-logo.png" alt="Chorify" width={36} height={36} className="size-9 object-contain"/>
         <div><div className="text-[17px] font-bold tracking-tight text-[#17223b]">Chorify</div><div className="-mt-0.5 text-[10px] font-semibold tracking-[.18em] text-[#376ce7]">PROJECTS</div></div>
         <button onClick={onClose} className="ml-auto text-slate-400 lg:hidden"><X size={20}/></button>
       </div>

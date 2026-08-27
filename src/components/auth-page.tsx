@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { FormEvent, useEffect, useState } from "react";
-import { ArrowRight, CheckCircle2, Eye, EyeOff, LoaderCircle, ShieldCheck, Sparkles } from "lucide-react";
+import { ArrowRight, CheckCircle2, Eye, EyeOff, LoaderCircle, ShieldCheck } from "lucide-react";
 
 type Props = { page: "login" | "register" };
 
@@ -10,7 +11,7 @@ export function AuthPage({ page }: Props) {
   const registering = page === "register";
   const [loginMode, setLoginMode] = useState<"password" | "code">("password");
   const [phone, setPhone] = useState("");
-  const [name, setName] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [code, setCode] = useState("");
@@ -42,7 +43,7 @@ export function AuthPage({ page }: Props) {
   async function submit(event: FormEvent) {
     event.preventDefault(); setError("");
     if (!/^1\d{10}$/.test(phone)) return setError("请输入正确的 11 位手机号");
-    if (registering && name.trim().length < 2) return setError("请输入至少 2 个字的姓名");
+    if (registering && username.trim().length < 2) return setError("请输入至少 2 个字符的账户名");
     if ((registering || loginMode === "password") && password.length < 8) return setError("密码至少需要 8 位");
     if (registering && !/[A-Za-z]/.test(password)) return setError("密码必须包含字母");
     if (registering && !/\d/.test(password)) return setError("密码必须包含数字");
@@ -51,7 +52,7 @@ export function AuthPage({ page }: Props) {
     setLoading(true);
     try {
       const url = registering ? "/api/auth/register" : loginMode === "password" ? "/api/auth/login" : "/api/auth/sms/verify";
-      const body = registering ? { name: name.trim(), phone, code, password } : loginMode === "password" ? { phone, password } : { phone, code };
+      const body = registering ? { username: username.trim(), phone, code, password } : loginMode === "password" ? { phone, password } : { phone, code };
       const response = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || (registering ? "注册失败" : "登录失败"));
@@ -63,17 +64,19 @@ export function AuthPage({ page }: Props) {
 
   const needsCode = registering || loginMode === "code";
   return <main className="grid min-h-screen bg-[#f4f7fb] lg:grid-cols-[1.05fr_.95fr]">
-    <section className="relative hidden overflow-hidden bg-[#173f9f] p-12 text-white lg:flex lg:flex-col">
-      <div className="flex items-center gap-3"><div className="grid size-10 place-items-center rounded-xl bg-white/15"><Sparkles size={21}/></div><div className="font-bold">Chorify Projects</div></div>
-      <div className="my-auto max-w-lg"><p className="mb-5 text-sm font-semibold tracking-[.18em] text-blue-200">PROJECT WORKSPACE</p><h1 className="text-4xl font-bold leading-tight">让每一次协作，<br/>都有清晰的上下文。</h1><p className="mt-5 max-w-md leading-7 text-blue-100/75">统一管理项目、任务、需求、Bug 与发布。真人负责决策，Codex 在你的授权下完成整理与提交。</p><div className="mt-9 space-y-3 text-sm text-blue-100/80">{["项目成员和职责清晰可见","任务提交与验收完整留痕","个人 API Key 权限受控"].map((item) => <div key={item} className="flex items-center gap-2"><CheckCircle2 size={16}/>{item}</div>)}</div></div>
+    <section className="relative hidden overflow-hidden bg-[#071b4a] p-12 text-white lg:flex lg:flex-col">
+      <Image src="/auth-protocol-bg.png" alt="Agent 协作协议网络" fill priority className="object-cover object-center" sizes="55vw"/>
+      <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(5,18,52,.96)_0%,rgba(5,18,52,.82)_48%,rgba(5,18,52,.24)_100%)]"/>
+      <div className="relative z-10 flex items-center gap-3"><Image src="/chorify-logo.png" alt="Chorify" width={40} height={40} className="size-10 object-contain"/><div className="font-bold">Chorify Projects</div></div>
+      <div className="relative z-10 my-auto max-w-xl"><p className="mb-5 text-sm font-semibold tracking-[.18em] text-blue-200">UNIFIED AGENT PROTOCOL</p><h1 className="text-4xl font-bold leading-tight">统一团队 Agent 协作协议，<br/>构建更高效的项目管理系统。</h1><p className="mt-5 max-w-lg leading-7 text-blue-100/80">在人的指挥与授权下，让不同 Agent 共享项目上下文、任务标准与交付记录，减少协作损耗，让每一次提交都可追踪、可验收。</p><div className="mt-9 space-y-3 text-sm text-blue-100/85">{["统一项目上下文与协作接口","任务提交与验收完整留痕","个人 API Key 权限受控"].map((item) => <div key={item} className="flex items-center gap-2"><CheckCircle2 size={16}/>{item}</div>)}</div></div>
       <p className="text-xs text-blue-200/60">© 2026 Chorify Projects</p>
     </section>
     <section className="flex items-center justify-center p-6 py-10"><div className="w-full max-w-[420px]">
-      <div className="mb-8 flex items-center gap-2 lg:hidden"><div className="grid size-9 place-items-center rounded-xl bg-blue-600 text-white"><Sparkles size={18}/></div><b>Chorify Projects</b></div>
+      <div className="mb-8 flex items-center gap-2 lg:hidden"><Image src="/chorify-logo.png" alt="Chorify" width={36} height={36} className="size-9 object-contain"/><b>Chorify Projects</b></div>
       <p className="text-sm font-medium text-blue-600">{registering ? "创建账户" : "欢迎回来"}</p><h2 className="mt-2 text-3xl font-bold">{registering ? "注册工作空间" : "登录工作空间"}</h2><p className="mt-2 text-sm text-slate-500">{registering ? "验证手机号并设置你的登录密码" : "使用手机号继续访问你的项目"}</p>
       {!registering && <div className="mt-7 flex rounded-xl bg-slate-100 p-1">{([["password","账户密码"],["code","手机验证码"]] as const).map(([key,label]) => <button type="button" key={key} onClick={() => { setLoginMode(key); setError(""); }} className={`h-10 flex-1 rounded-lg text-sm font-medium ${loginMode===key?"bg-white text-slate-900 shadow-sm":"text-slate-500"}`}>{label}</button>)}</div>}
       <form onSubmit={submit} className="mt-6 space-y-4">
-        {registering && <Field label="姓名"><input value={name} onChange={(event)=>setName(event.target.value)} autoComplete="name" className="field" placeholder="请输入真实姓名"/></Field>}
+        {registering && <Field label="账户名"><input value={username} onChange={(event)=>setUsername(event.target.value)} autoComplete="username" className="field" placeholder="请输入账户名"/></Field>}
         <Field label="手机号"><input value={phone} onChange={(event)=>setPhone(event.target.value.replace(/\D/g,"").slice(0,11))} inputMode="numeric" autoComplete="tel" className="field" placeholder="请输入 11 位手机号"/></Field>
         {needsCode && <Field label="验证码"><div className="relative"><input value={code} onChange={(event)=>setCode(event.target.value.replace(/\D/g,"").slice(0,6))} inputMode="numeric" autoComplete="one-time-code" className="field pr-28" placeholder="请输入 6 位验证码"/><button type="button" disabled={sending || countdown>0} onClick={sendCode} className="absolute right-3 top-3 text-sm font-medium text-blue-600 disabled:text-slate-400">{sending?"发送中...":countdown?`${countdown} 秒后重试`:"获取验证码"}</button></div></Field>}
         {(registering || loginMode === "password") && <Field label="密码"><div className="relative"><input value={password} onChange={(event)=>setPassword(event.target.value)} type={showPassword?"text":"password"} autoComplete={registering?"new-password":"current-password"} className="field pr-12" placeholder={registering?"至少 8 位，包含字母和数字":"请输入密码"}/><button type="button" aria-label="显示或隐藏密码" onClick={()=>setShowPassword(!showPassword)} className="absolute right-3 top-3 text-slate-400">{showPassword?<EyeOff size={18}/>:<Eye size={18}/>}</button></div></Field>}
