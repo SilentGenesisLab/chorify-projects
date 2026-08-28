@@ -2,6 +2,7 @@ import type { TeamRole } from "@prisma/client";
 import type { NextRequest } from "next/server";
 import { prisma } from "./prisma";
 import { SESSION_COOKIE, verifySessionToken } from "./session";
+import { currentApiActor } from "@/lib/api-request-context";
 
 export const TEAM_ROLE_LABELS: Record<TeamRole, string> = {
   OWNER: "团队所有者",
@@ -13,6 +14,8 @@ export const TEAM_ROLE_LABELS: Record<TeamRole, string> = {
 export const isTeamManager = (role: TeamRole) => role === "OWNER" || role === "ADMIN";
 
 export async function getRequestUserId(request: NextRequest) {
+  const apiActor = currentApiActor();
+  if (apiActor && request.nextUrl.pathname.startsWith("/api/v1/")) return apiActor.userId;
   return verifySessionToken(request.cookies.get(SESSION_COOKIE)?.value);
 }
 

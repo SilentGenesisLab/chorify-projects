@@ -125,6 +125,7 @@ model User {
   reports                   WorkReport[]
   acceptances               Acceptance[]
   apiTokens                 ApiToken[]
+  apiIdempotencyRecords     ApiIdempotencyRecord[]
   auditLogs                 AuditLog[]
   feedbacks                 Feedback[]
   createdFolders            FileFolder[]             @relation("FolderCreator")
@@ -347,7 +348,6 @@ model Project {
   folders        FileFolder[]
   fileShares     FileShare[]
   fileUploads    FileUploadSession[]
-  apiTokenScopes ApiTokenProject[]
   team           Team                @relation(fields: [teamId], references: [id], onDelete: Restrict)
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
@@ -468,6 +468,7 @@ model Acceptance {
   reviewerId String
   result     String
   comment    String
+  verification String @default("")
   task       Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
   reviewer   User     @relation(fields: [reviewerId], references: [id])
   createdAt  DateTime @default(now())
@@ -687,27 +688,35 @@ model ApiToken {
   name        String
   prefix      String
   tokenHash   String            @unique
-  allProjects Boolean           @default(false)
   permissions String[]
   expiresAt   DateTime?
   revokedAt   DateTime?
   lastUsedAt  DateTime?
   user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  projects    ApiTokenProject[]
+  idempotencyRecords ApiIdempotencyRecord[]
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
 
   @@index([userId, createdAt])
 }
 
-model ApiTokenProject {
-  tokenId   String
-  projectId String
-  token     ApiToken @relation(fields: [tokenId], references: [id], onDelete: Cascade)
-  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+model ApiIdempotencyRecord {
+  id          String   @id @default(cuid())
+  tokenId     String
+  userId      String
+  key         String
+  method      String
+  path        String
+  requestHash String
+  status      Int
+  response    Json
+  expiresAt   DateTime
+  token       ApiToken @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
 
-  @@id([tokenId, projectId])
-  @@index([projectId])
+  @@unique([tokenId, key])
+  @@index([expiresAt])
 }
 
 model AuditLog {

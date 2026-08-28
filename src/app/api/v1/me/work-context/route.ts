@@ -6,8 +6,14 @@ import { auditApiCall } from "@/lib/api-audit";
 export async function GET(request: Request) {
   const auth = await authenticateApi(request, "task:read");
   if (!auth) return NextResponse.json({ error: "无效或已过期的 API Key" }, { status: 401 });
-  const memberships = await prisma.projectMember.findMany({ where: { userId: auth.userId }, select: { projectId: true } });
-  const scopedIds = auth.allProjects ? memberships.map((item) => item.projectId) : auth.projects.map((item) => item.projectId).filter((id) => memberships.some((item) => item.projectId === id));
+  const projects = await prisma.project.findMany({
+    where: { OR: [
+      { members: { some: { userId: auth.userId } } },
+      { team: { members: { some: { userId: auth.userId, role: { in: ["OWNER", "ADMIN"] } } } } },
+    ] },
+    select: { id: true },
+  });
+  const scopedIds = projects.map((project) => project.id);
   const tasks = await prisma.task.findMany({
     where: { assigneeId: auth.userId, projectId: { in: scopedIds } },
     include: { project: { select: { code: true, name: true } }, coordinator: { select: { id: true, name: true } }, acceptor: { select: { id: true, name: true } }, dependencies: { include: { dependsOn: { select: { code: true, title: true, status: true } } } }, version: { select: { name: true } } },

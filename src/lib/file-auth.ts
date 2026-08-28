@@ -13,7 +13,10 @@ export async function fileUser(request: Request, apiPermission?: ApiTokenPermiss
   const auth = await authenticateApi(request, apiPermission);
   return auth ? { id: auth.userId, systemRole: auth.user.systemRole, apiToken: auth } : null;
 }
-export function apiTokenAllowsProject(user: NonNullable<Awaited<ReturnType<typeof fileUser>>>, projectId: string) { return !user.apiToken || user.apiToken.allProjects || user.apiToken.projects.some((scope) => scope.projectId === projectId); }
+// API Keys follow the owning user's live project access. Callers still apply
+// projectFileAccess/visible-project filters, so there is no persisted token
+// scope to check here anymore.
+export function apiTokenAllowsProject(_user: NonNullable<Awaited<ReturnType<typeof fileUser>>>, _projectId: string) { return true; }
 
 export async function projectFileAccess(userId: string, projectId: string) {
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { systemRole: true } });
