@@ -3,10 +3,10 @@
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { ProjectWorkspace } from "@/components/project-workspace";
+import { ProjectOverview } from "@/components/project-overview";
 import { FileManager } from "@/components/file-manager";
 import { SelectField } from "@/components/ui/select-field";
 import {
-  AlertTriangle,
   Bug,
   Check,
   CheckCircle2,
@@ -272,84 +272,7 @@ function ProjectSection({
   if (section === "requirements" || section === "tasks" || section === "bugs" || section === "versions")
     return <ProjectWorkspace projectId={project.id} module={section} />;
   if (section === "overview")
-    return (
-      <div className="space-y-5">
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {[
-            { label: "需求", value: "18", note: "14 项已确认", icon: Target },
-            {
-              label: "任务",
-              value: String(project.taskCount),
-              note: "5 项进行中",
-              icon: ListChecks,
-            },
-            {
-              label: "未关闭 Bug",
-              value: "7",
-              note: "1 个严重问题",
-              icon: Bug,
-            },
-            {
-              label: "当前版本",
-              value: "V0.9",
-              note: "完成度 72%",
-              icon: Rocket,
-            },
-          ].map((item) => (
-            <div className="card p-5" key={item.label}>
-              <div className="flex items-start">
-                <span className="grid size-10 place-items-center rounded-xl bg-blue-50 text-blue-600">
-                  <item.icon size={19} />
-                </span>
-                <span className="ml-auto text-2xl font-bold">{item.value}</span>
-              </div>
-              <p className="mt-4 text-sm font-medium">{item.label}</p>
-              <p className="mt-1 text-xs text-slate-400">{item.note}</p>
-            </div>
-          ))}
-        </div>
-        <div className="grid gap-5 xl:grid-cols-[1.4fr_1fr]">
-          <section className="card p-5">
-            <h3 className="font-semibold">项目进度</h3>
-            <div className="mt-5 h-2 rounded-full bg-slate-100">
-              <div className="h-full w-[68%] rounded-full bg-blue-500" />
-            </div>
-            <div className="mt-3 flex justify-between text-xs text-slate-500">
-              <span>范围完成度</span>
-              <b className="text-blue-600">68%</b>
-            </div>
-          </section>
-          <section className="card p-5">
-            <h3 className="font-semibold">需要关注</h3>
-            <div className="mt-4 space-y-3">
-              {[
-                "2 项任务已超过截止时间",
-                "1 个严重 Bug 等待验证",
-                "V0.9 计划 9月5日发布",
-              ].map((text, index) => (
-                <div
-                  key={text}
-                  className="flex items-start gap-2 text-sm text-slate-600"
-                >
-                  {index < 2 ? (
-                    <AlertTriangle
-                      className="mt-0.5 shrink-0 text-amber-500"
-                      size={16}
-                    />
-                  ) : (
-                    <CheckCircle2
-                      className="mt-0.5 shrink-0 text-emerald-500"
-                      size={16}
-                    />
-                  )}
-                  <span>{text}</span>
-                </div>
-              ))}
-            </div>
-          </section>
-        </div>
-      </div>
-    );
+    return <ProjectOverview projectId={project.id} />;
   const config = {
     requirements: {
       title: "需求管理",

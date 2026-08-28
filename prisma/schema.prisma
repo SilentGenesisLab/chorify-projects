@@ -26,6 +26,34 @@ enum TeamRole {
   GUEST
 }
 
+enum OkrPeriodType {
+  MONTHLY
+  QUARTERLY
+  YEARLY
+}
+
+enum OkrStatus {
+  DRAFT
+  ACTIVE
+  AT_RISK
+  COMPLETED
+  ARCHIVED
+}
+
+enum MessagePriority {
+  NORMAL
+  IMPORTANT
+  URGENT
+}
+
+enum MilestoneStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  DELAYED
+  CANCELLED
+}
+
 enum Priority {
   LOW
   MEDIUM
@@ -75,58 +103,165 @@ enum ReleaseStatus {
 }
 
 model User {
-  id               String              @id @default(cuid())
-  name             String
-  phone            String              @unique
-  passwordHash     String
-  avatarColor      String              @default("#376ce7")
-  systemRole       SystemRole          @default(MEMBER)
-  projectMembers   ProjectMember[]
-  teamMembers      TeamMember[]
-  createdInvites   TeamInvite[]        @relation("TeamInviteCreator")
-  assignedTasks    Task[]              @relation("TaskAssignee")
-  coordinatedTasks Task[]              @relation("TaskCoordinator")
-  acceptedTasks    Task[]              @relation("TaskAcceptor")
-  reports          WorkReport[]
-  acceptances      Acceptance[]
-  apiTokens        ApiToken[]
-  auditLogs        AuditLog[]
-  feedbacks        Feedback[]
-  createdFolders   FileFolder[]        @relation("FolderCreator")
-  createdFiles     FileAsset[]         @relation("FileCreator")
-  uploadedVersions FileVersion[]       @relation("VersionUploader")
-  createdShares    FileShare[]         @relation("ShareCreator")
-  uploadSessions   FileUploadSession[]
-  requestedRequirements Requirement[]  @relation("RequirementRequester")
+  id                        String                   @id @default(cuid())
+  name                      String
+  phone                     String                   @unique
+  passwordHash              String
+  avatarColor               String                   @default("#376ce7")
+  systemRole                SystemRole               @default(MEMBER)
+  projectMembers            ProjectMember[]
+  teamMembers               TeamMember[]
+  createdInvites            TeamInvite[]             @relation("TeamInviteCreator")
+  assignedTasks             Task[]                   @relation("TaskAssignee")
+  coordinatedTasks          Task[]                   @relation("TaskCoordinator")
+  acceptedTasks             Task[]                   @relation("TaskAcceptor")
+  reports                   WorkReport[]
+  acceptances               Acceptance[]
+  apiTokens                 ApiToken[]
+  auditLogs                 AuditLog[]
+  feedbacks                 Feedback[]
+  createdFolders            FileFolder[]             @relation("FolderCreator")
+  createdFiles              FileAsset[]              @relation("FileCreator")
+  uploadedVersions          FileVersion[]            @relation("VersionUploader")
+  createdShares             FileShare[]              @relation("ShareCreator")
+  uploadSessions            FileUploadSession[]
+  requestedRequirements     Requirement[]            @relation("RequirementRequester")
   requirementParticipations RequirementParticipant[]
-  ownedVersions    Version[]           @relation("VersionOwner")
-  versionParticipations VersionParticipant[]
-  createdAt        DateTime            @default(now())
-  updatedAt        DateTime            @updatedAt
+  ownedVersions             Version[]                @relation("VersionOwner")
+  versionParticipations     VersionParticipant[]
+  ownedMilestones           Milestone[]              @relation("MilestoneOwner")
+  ownedTeamObjectives       TeamObjective[]          @relation("ObjectiveOwner")
+  ownedKeyResults           TeamKeyResult[]          @relation("KeyResultOwner")
+  keyResultAlignments       TeamKeyResultAlignment[]
+  keyResultCheckIns         TeamKeyResultCheckIn[]
+  sentTeamMessages          TeamMessage[]            @relation("TeamMessageSender")
+  receivedTeamMessages      TeamMessageRecipient[]
+  createdAt                 DateTime                 @default(now())
+  updatedAt                 DateTime                 @updatedAt
 }
 
 model Team {
-  id          String       @id @default(cuid())
-  name        String
-  description String?
-  members     TeamMember[]
-  projects    Project[]
-  invites     TeamInvite[]
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  id               String          @id @default(cuid())
+  name             String
+  description      String?
+  mission          String?
+  responsibilities String?
+  members          TeamMember[]
+  projects         Project[]
+  invites          TeamInvite[]
+  objectives       TeamObjective[]
+  messages         TeamMessage[]
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
 }
 
 model TeamMember {
-  id       String   @id @default(cuid())
-  teamId   String
-  userId   String
-  role     TeamRole @default(MEMBER)
-  joinedAt DateTime @default(now())
-  team     Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id             String   @id @default(cuid())
+  teamId         String
+  userId         String
+  role           TeamRole @default(MEMBER)
+  joinedAt       DateTime @default(now())
+  title          String?
+  responsibility String?
+  bio            String?
+  team           Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([teamId, userId])
   @@index([userId])
+}
+
+model TeamObjective {
+  id          String          @id @default(cuid())
+  teamId      String
+  title       String
+  description String          @default("")
+  periodType  OkrPeriodType
+  periodLabel String
+  startsAt    DateTime
+  endsAt      DateTime
+  ownerId     String
+  status      OkrStatus       @default(ACTIVE)
+  team        Team            @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  owner       User            @relation("ObjectiveOwner", fields: [ownerId], references: [id])
+  keyResults  TeamKeyResult[]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([teamId, startsAt, endsAt])
+}
+
+model TeamKeyResult {
+  id           String                   @id @default(cuid())
+  objectiveId  String
+  title        String
+  targetValue  Float
+  currentValue Float                    @default(0)
+  unit         String
+  confidence   Int                      @default(50)
+  ownerId      String
+  objective    TeamObjective            @relation(fields: [objectiveId], references: [id], onDelete: Cascade)
+  owner        User                     @relation("KeyResultOwner", fields: [ownerId], references: [id])
+  alignments   TeamKeyResultAlignment[]
+  checkIns     TeamKeyResultCheckIn[]
+  createdAt    DateTime                 @default(now())
+  updatedAt    DateTime                 @updatedAt
+
+  @@index([objectiveId])
+}
+
+model TeamKeyResultAlignment {
+  keyResultId String
+  userId      String
+  keyResult   TeamKeyResult @relation(fields: [keyResultId], references: [id], onDelete: Cascade)
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([keyResultId, userId])
+  @@index([userId])
+}
+
+model TeamKeyResultCheckIn {
+  id           String        @id @default(cuid())
+  keyResultId  String
+  authorId     String
+  currentValue Float
+  confidence   Int
+  note         String        @default("")
+  keyResult    TeamKeyResult @relation(fields: [keyResultId], references: [id], onDelete: Cascade)
+  author       User          @relation(fields: [authorId], references: [id])
+  createdAt    DateTime      @default(now())
+
+  @@index([keyResultId, createdAt])
+}
+
+model TeamMessage {
+  id         String                 @id @default(cuid())
+  teamId     String
+  senderId   String
+  title      String
+  body       String
+  priority   MessagePriority        @default(NORMAL)
+  projectId  String?
+  taskId     String?
+  revokedAt  DateTime?
+  team       Team                   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  sender     User                   @relation("TeamMessageSender", fields: [senderId], references: [id])
+  recipients TeamMessageRecipient[]
+  createdAt  DateTime               @default(now())
+
+  @@index([teamId, createdAt])
+}
+
+model TeamMessageRecipient {
+  messageId   String
+  userId      String
+  deliveredAt DateTime    @default(now())
+  readAt      DateTime?
+  message     TeamMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([messageId, userId])
+  @@index([userId, readAt, deliveredAt])
 }
 
 model TeamInvite {
@@ -169,6 +304,7 @@ model Project {
   code           String              @unique
   name           String
   description    String
+  background     String              @default("")
   status         String              @default("ACTIVE")
   startDate      DateTime?
   endDate        DateTime?
@@ -177,6 +313,7 @@ model Project {
   tasks          Task[]
   bugs           Bug[]
   versions       Version[]
+  milestones     Milestone[]
   releases       Release[]
   files          FileAsset[]
   folders        FileFolder[]
@@ -203,8 +340,8 @@ model ProjectMember {
 }
 
 model Requirement {
-  id                 String   @id @default(cuid())
-  code               String   @unique
+  id                 String                   @id @default(cuid())
+  code               String                   @unique
   projectId          String
   title              String
   description        String
@@ -214,14 +351,14 @@ model Requirement {
   targetVersionId    String?
   requesterId        String?
   closedAt           DateTime?
-  project            Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  targetVersion      Version? @relation(fields: [targetVersionId], references: [id])
-  requester          User?    @relation("RequirementRequester", fields: [requesterId], references: [id])
+  project            Project                  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  targetVersion      Version?                 @relation(fields: [targetVersionId], references: [id])
+  requester          User?                    @relation("RequirementRequester", fields: [requesterId], references: [id])
   participants       RequirementParticipant[]
   tasks              Task[]
   bugs               Bug[]
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
 }
 
 model RequirementParticipant {
@@ -246,6 +383,8 @@ model Task {
   priority           Priority
   status             TaskStatus       @default(TODO)
   dueAt              DateTime?
+  closedAt           DateTime?
+  completedAt        DateTime?
   assigneeId         String?
   coordinatorId      String?
   acceptorId         String?
@@ -265,6 +404,8 @@ model Task {
 
   @@index([projectId, status])
   @@index([assigneeId, status])
+  @@index([projectId, completedAt])
+  @@index([projectId, closedAt])
 }
 
 model TaskDependency {
@@ -324,24 +465,25 @@ model Bug {
 }
 
 model Version {
-  id           String        @id @default(cuid())
+  id           String               @id @default(cuid())
   projectId    String
   name         String
   goal         String
-  description  String        @default("")
+  description  String               @default("")
   ownerId      String?
-  status       VersionStatus @default(PLANNING)
+  status       VersionStatus        @default(PLANNING)
   plannedAt    DateTime?
-  project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  owner        User?         @relation("VersionOwner", fields: [ownerId], references: [id])
+  project      Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  owner        User?                @relation("VersionOwner", fields: [ownerId], references: [id])
   participants VersionParticipant[]
   requirements Requirement[]
   tasks        Task[]
-  foundBugs    Bug[]         @relation("FoundVersion")
-  fixedBugs    Bug[]         @relation("FixedVersion")
+  foundBugs    Bug[]                @relation("FoundVersion")
+  fixedBugs    Bug[]                @relation("FixedVersion")
   releases     Release[]
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  milestones   Milestone[]
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
 
   @@unique([projectId, name])
 }
@@ -354,6 +496,27 @@ model VersionParticipant {
 
   @@id([versionId, userId])
   @@index([userId])
+}
+
+model Milestone {
+  id          String          @id @default(cuid())
+  projectId   String
+  versionId   String?
+  ownerId     String?
+  title       String
+  description String          @default("")
+  status      MilestoneStatus @default(PLANNED)
+  dueAt       DateTime
+  completedAt DateTime?
+  sortOrder   Int             @default(0)
+  project     Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  version     Version?        @relation(fields: [versionId], references: [id], onDelete: SetNull)
+  owner       User?           @relation("MilestoneOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([projectId, dueAt])
+  @@index([ownerId])
 }
 
 model Release {

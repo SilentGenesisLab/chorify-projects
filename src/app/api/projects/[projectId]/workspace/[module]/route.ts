@@ -4,6 +4,7 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getRequestUserId } from "@/lib/team-permissions";
 import { getProjectAccess } from "@/lib/project-permissions";
+import { nextTaskCompletedAt } from "@/lib/project-overview";
 
 const optionalId = z.string().cuid().nullable().optional();
 const schemas = {
@@ -176,8 +177,15 @@ export async function POST(
   }
   else if (module === "tasks") {
     const { dependencyIds, ...taskData } = data;
+    const completedAt = nextTaskCompletedAt(String(data.status), null);
     item = await prisma.task.create({
-      data: { ...taskData, code, projectId } as Prisma.TaskUncheckedCreateInput,
+      data: {
+        ...taskData,
+        code,
+        projectId,
+        completedAt,
+        closedAt: completedAt,
+      } as Prisma.TaskUncheckedCreateInput,
     });
     if ((dependencyIds as string[]).length)
       await prisma.taskDependency.createMany({

@@ -1,0 +1,2 @@
+import{NextRequest,NextResponse}from"next/server";import{prisma}from"@/lib/prisma";import{getRequestUserId}from"@/lib/team-permissions";
+export async function GET(request:NextRequest){const userId=await getRequestUserId(request);if(!userId)return NextResponse.json({error:"请先登录"},{status:401});const unread=await prisma.teamMessageRecipient.count({where:{userId,readAt:null,message:{revokedAt:null}}});return NextResponse.json({unread});}

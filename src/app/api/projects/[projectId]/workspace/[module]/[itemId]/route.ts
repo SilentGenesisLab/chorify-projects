@@ -4,6 +4,7 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getRequestUserId } from "@/lib/team-permissions";
 import { getProjectAccess } from "@/lib/project-permissions";
+import { nextTaskCompletedAt } from "@/lib/project-overview";
 
 const ids = z.string().cuid().nullable().optional();
 const baseSchemas = {
@@ -164,11 +165,20 @@ export async function PATCH(
     const { dependencyIds, ...taskData } = data;
     if ((dependencyIds as string[]).includes(itemId))
       return NextResponse.json({ error: "任务不能依赖自身" }, { status: 400 });
+    const existing = await prisma.task.findUnique({
+      where: { id: itemId },
+      select: { completedAt: true },
+    });
+    const completedAt = nextTaskCompletedAt(String(data.status), existing?.completedAt);
     await prisma.$transaction([
       prisma.taskDependency.deleteMany({ where: { taskId: itemId } }),
       prisma.task.update({
         where: { id: itemId },
-        data: taskData as Prisma.TaskUncheckedUpdateInput,
+        data: {
+          ...taskData,
+          completedAt,
+          closedAt: completedAt,
+        } as Prisma.TaskUncheckedUpdateInput,
       }),
       ...((dependencyIds as string[]).length
         ? [prisma.taskDependency.createMany({ data: (dependencyIds as string[]).map((dependsOnId) => ({ taskId: itemId, dependsOnId })) })]

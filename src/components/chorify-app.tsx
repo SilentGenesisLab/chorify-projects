@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { AuthPage } from "@/components/auth-page";
 import { InvitePage } from "@/components/invite-page";
 import { ProjectsPage } from "@/components/projects-page";
@@ -252,6 +252,8 @@ function FeedbackModal({ close }: { close: () => void }) {
 
 function Header({ route, onMenu }: { route: string; onMenu: () => void }) {
   const rootRoute = route.split("/")[0];
+  const [unread,setUnread]=useState(0);
+  useEffect(()=>{fetch("/api/notifications/summary").then(x=>x.ok?x.json():{unread:0}).then(x=>setUnread(x.unread||0)).catch(()=>{})},[route]);
   return (
     <header className="sticky top-0 z-20 flex h-[72px] items-center border-b border-[#e5eaf1] bg-[#f8faff]/90 px-5 backdrop-blur md:px-8">
       <button onClick={onMenu} className="mr-3 text-slate-500 lg:hidden">
@@ -270,13 +272,13 @@ function Header({ route, onMenu }: { route: string; onMenu: () => void }) {
           ⌘ K
         </kbd>
       </div>
-      <button
+      <Link href="/teams"
         aria-label="通知"
         className="relative ml-3 grid size-10 place-items-center rounded-xl border border-[#e3e9f2] bg-white text-slate-500"
       >
         <Bell size={18} />
-        <i className="absolute right-2 top-2 size-1.5 rounded-full bg-rose-500" />
-      </button>
+        {unread>0&&<i className="absolute -right-1 -top-1 grid min-w-5 place-items-center rounded-full bg-rose-500 px-1 text-[10px] font-semibold not-italic text-white">{unread>99?"99+":unread}</i>}
+      </Link>
     </header>
   );
 }

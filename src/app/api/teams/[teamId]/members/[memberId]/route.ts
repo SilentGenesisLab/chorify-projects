@@ -20,13 +20,13 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const { teamId, memberId } = await params;
   const access = await context(request, teamId, memberId);
   if ("error" in access) return access.error;
-  const input = z.object({ role: z.enum(["ADMIN", "MEMBER", "GUEST"]) }).safeParse(await request.json());
-  if (!input.success) return NextResponse.json({ error: "无效的团队角色" }, { status: 400 });
+  const input = z.object({ role: z.enum(["ADMIN", "MEMBER", "GUEST"]).optional(), title: z.string().trim().max(80).optional(), responsibility: z.string().trim().max(500).optional(), bio: z.string().trim().max(1000).optional() }).safeParse(await request.json());
+  if (!input.success) return NextResponse.json({ error: "成员资料不符合要求" }, { status: 400 });
   if (input.data.role === "ADMIN" && access.actor.role !== "OWNER") return NextResponse.json({ error: "只有团队所有者可以设置管理员" }, { status: 403 });
   if (await isRateLimited(access.userId, "UPDATE_TEAM_ROLE")) return NextResponse.json({ error: "操作过于频繁，请稍后再试" }, { status: 429 });
   const member = await prisma.$transaction(async (tx) => {
-    const updated = await tx.teamMember.update({ where: { id: memberId }, data: { role: input.data.role } });
-    await tx.auditLog.create({ data: { userId: access.userId, actorType: "USER", action: "UPDATE_TEAM_ROLE", resource: "TEAM_MEMBER", resourceId: memberId, channel: "WEB", metadata: { teamId, from: access.target.role, to: input.data.role } } });
+    const updated = await tx.teamMember.update({ where: { id: memberId }, data: input.data });
+    await tx.auditLog.create({ data: { userId: access.userId, actorType: "USER", action: input.data.role ? "UPDATE_TEAM_ROLE" : "UPDATE_TEAM_MEMBER_PROFILE", resource: "TEAM_MEMBER", resourceId: memberId, channel: "WEB", metadata: { teamId, targetUserId: access.target.userId, fields: Object.keys(input.data) } } });
     return updated;
   });
   return NextResponse.json({ member });
