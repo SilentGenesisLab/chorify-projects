@@ -10,6 +10,7 @@ import { ProjectsPage } from "@/components/projects-page";
 import { TeamManagement } from "@/components/team-management";
 import { ApiKeyPage } from "@/components/api-key-page";
 import { AuditLogPage } from "@/components/audit-log-page";
+import { MyTasksPage } from "@/components/my-tasks-page";
 import { FileManager } from "@/components/file-manager";
 import { FileSharePage } from "@/components/file-share-page";
 import { SelectField } from "@/components/ui/select-field";
@@ -316,45 +317,6 @@ function Header({ route, onMenu }: { route: string; onMenu: () => void }) {
   );
 }
 
-const tasks = [
-  {
-    id: "CP-142",
-    name: "完成项目成员权限矩阵",
-    project: "Chorify Projects",
-    owner: "陈默",
-    priority: "高",
-    status: "进行中",
-    date: "今天",
-  },
-  {
-    id: "CP-138",
-    name: "梳理任务提交与验收流程",
-    project: "Chorify Projects",
-    owner: "林舟",
-    priority: "中",
-    status: "待验收",
-    date: "8月28日",
-  },
-  {
-    id: "WEB-48",
-    name: "移动端导航适配",
-    project: "官网重构",
-    owner: "周青",
-    priority: "中",
-    status: "进行中",
-    date: "8月30日",
-  },
-  {
-    id: "CP-129",
-    name: "整理首版演示数据",
-    project: "Chorify Projects",
-    owner: "苏禾",
-    priority: "低",
-    status: "待处理",
-    date: "9月1日",
-  },
-];
-
 function Dashboard() {
   const router = useRouter();
   const [data, setData] = useState<DashboardData | null>(null);
@@ -552,52 +514,6 @@ function DashboardTaskTable({ tasks, generatedAt }: { tasks: DashboardTask[]; ge
   return <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-left"><thead><tr className="border-b border-[#edf1f5] bg-[#fafbfd] text-[11px] uppercase tracking-wide text-slate-400"><th className="px-5 py-3 font-medium">任务</th><th className="px-4 py-3 font-medium">负责人</th><th className="px-4 py-3 font-medium">优先级</th><th className="px-4 py-3 font-medium">状态</th><th className="px-5 py-3 font-medium">截止</th></tr></thead><tbody>{tasks.map((task) => <tr key={task.id} className="border-b border-[#f0f3f7] last:border-0 hover:bg-slate-50/70"><td className="px-5 py-3.5"><Link href={`/projects/${task.project.id}/tasks`}><p className="text-sm font-medium">{task.title}</p><p className="mt-0.5 text-xs text-slate-400">{task.code} · {task.project.name}</p></Link></td><td className="px-4 py-3.5"><div className="flex items-center gap-2"><Avatar name={task.assignee?.name || "未分配"}/><span className="text-sm text-slate-600">{task.assignee?.name || "未分配"}</span></div></td><td className="px-4 py-3.5"><Status>{dashboardPriority[task.priority] || task.priority}</Status></td><td className="px-4 py-3.5"><Status>{dashboardStatus[task.status] || task.status}</Status></td><td className={`px-5 py-3.5 text-sm ${task.overdue ? "font-medium text-rose-600" : "text-slate-500"}`}>{task.dueAt ? `${task.overdue ? "已逾期 · " : shanghaiDate(new Date(task.dueAt)) === shanghaiDate(generatedAt) ? "今天 · " : ""}${shortDate(task.dueAt)}` : "未设置"}</td></tr>)}</tbody></table></div>;
 }
 
-function TaskTable({ compact = false }: { compact?: boolean }) {
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[720px] text-left">
-        <thead>
-          <tr className="border-b border-[#edf1f5] bg-[#fafbfd] text-[11px] uppercase tracking-wide text-slate-400">
-            <th className="px-5 py-3 font-medium">任务</th>
-            <th className="px-4 py-3 font-medium">负责人</th>
-            <th className="px-4 py-3 font-medium">优先级</th>
-            <th className="px-4 py-3 font-medium">状态</th>
-            <th className="px-5 py-3 font-medium">截止</th>
-          </tr>
-        </thead>
-        <tbody>
-          {tasks.slice(0, compact ? 4 : undefined).map((x) => (
-            <tr
-              key={x.id}
-              className="border-b border-[#f0f3f7] last:border-0 hover:bg-slate-50/70"
-            >
-              <td className="px-5 py-3.5">
-                <p className="text-sm font-medium">{x.name}</p>
-                <p className="mt-0.5 text-xs text-slate-400">
-                  {x.id} · {x.project}
-                </p>
-              </td>
-              <td className="px-4 py-3.5">
-                <div className="flex items-center gap-2">
-                  <Avatar name={x.owner} />
-                  <span className="text-sm text-slate-600">{x.owner}</span>
-                </div>
-              </td>
-              <td className="px-4 py-3.5">
-                <Status>{x.priority}</Status>
-              </td>
-              <td className="px-4 py-3.5">
-                <Status>{x.status}</Status>
-              </td>
-              <td className="px-5 py-3.5 text-sm text-slate-500">{x.date}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
 function GenericPage({ route }: { route: string }) {
   const config: Record<
     string,
@@ -653,15 +569,7 @@ function GenericPage({ route }: { route: string }) {
   const Icon = c.icon;
   if (route === "files") return <FileManager />;
   if (route === "my-tasks" || route === "tasks")
-    return (
-      <div className="space-y-5">
-        <PageTitle title="我的任务" subtitle={c.subtitle} action={c.action} />
-        <Filters />
-        <div className="card overflow-hidden">
-          <TaskTable />
-        </div>
-      </div>
-    );
+    return <MyTasksPage />;
   const cards =
     route === "projects"
       ? [

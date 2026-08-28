@@ -154,6 +154,8 @@ export async function PATCH(
   );
   if (participantIds.some((id) => !projectMemberIds.has(id)))
     return NextResponse.json({ error: "参与人必须是项目成员" }, { status: 400 });
+  if (module === "tasks" && [data.assigneeId, data.coordinatorId, data.acceptorId].some((id) => id && !projectMemberIds.has(String(id))))
+    return NextResponse.json({ error: "任务负责人、对接人和验收人必须是项目成员" }, { status: 400 });
   if (module === "versions" && ownerId && ownerId !== userId && !projectMemberIds.has(ownerId))
     return NextResponse.json({ error: "负责人必须是项目成员" }, { status: 400 });
   if (module === "versions" && fileIds.length) {
