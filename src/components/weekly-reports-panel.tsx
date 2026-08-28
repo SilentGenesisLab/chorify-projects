@@ -175,8 +175,8 @@ function WeeklyReportEditor({ teamId, weekStart, report, close, saved }: {
         </div>
         <form className="mt-6" onSubmit={(event: FormEvent) => { event.preventDefault(); void save("SUBMIT"); }}>
           <div className="grid gap-5 lg:grid-cols-2">
-            <label><span className="mb-2 block text-sm font-medium">Markdown 内容</span><textarea autoFocus value={content} onChange={(event) => setContent(event.target.value)} className="form-input min-h-[360px] resize-y font-mono text-sm leading-6" maxLength={50000} /></label>
-            <div><span className="mb-2 block text-sm font-medium">实时预览</span><div className="markdown-content min-h-[360px] rounded-xl border border-slate-200 bg-slate-50 p-6 text-sm leading-7 text-slate-700"><ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown></div></div>
+            <label><span className="mb-2 block text-sm font-medium">Markdown 内容</span><textarea autoFocus value={content} onChange={(event) => setContent(event.target.value)} className="form-input resize-y font-mono text-sm leading-6" style={{ height: "500px", minHeight: "500px" }} maxLength={50000} /></label>
+            <div><span className="mb-2 block text-sm font-medium">实时预览</span><div className="markdown-content min-h-[500px] rounded-xl border border-slate-200 bg-slate-50 p-6 text-sm leading-7 text-slate-700"><ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown></div></div>
           </div>
           {error && <p className="mt-3 text-sm text-rose-600">{error}</p>}
           <div className="mt-5 flex justify-end gap-2 border-t border-slate-100 pt-4">
