@@ -23,6 +23,25 @@ export async function projectFileAccess(userId: string, projectId: string) {
   return { canRead: canManage || Boolean(member), canWrite: canManage || member?.role === "MEMBER", canManage };
 }
 
+export async function fileScopeAccess(
+  userId: string,
+  projectId: string | null,
+  creatorId?: string | null,
+) {
+  if (projectId) return projectFileAccess(userId, projectId);
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { systemRole: true },
+  });
+  return {
+    canRead: Boolean(user),
+    canWrite: Boolean(user),
+    canManage:
+      user?.systemRole === "ADMIN" ||
+      (Boolean(creatorId) && creatorId === userId),
+  };
+}
+
 export async function storageUsage() {
   const aggregate = await prisma.fileVersion.aggregate({ _sum: { size: true }, where: { file: { deletedAt: null } } });
   return aggregate._sum.size || BigInt(0);

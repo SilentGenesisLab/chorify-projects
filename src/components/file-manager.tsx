@@ -27,23 +27,23 @@ import { parseFolderUploadPath } from "@/lib/folder-upload";
 type Project = { id: string; name: string; code: string };
 type FolderItem = {
   id: string;
-  projectId: string;
+  projectId: string | null;
   parentId: string | null;
   name: string;
   path: string;
-  project?: { name: string };
+  project?: { name: string } | null;
   creator?: { name: string };
 };
 type FileItem = {
   id: string;
-  projectId: string;
+  projectId: string | null;
   folderId: string | null;
   name: string;
   mimeType: string;
   size: number;
   tags: string[];
   deletedAt: string | null;
-  project: { name: string };
+  project: { name: string } | null;
   creator: { name: string } | null;
   currentVersion: { version: number } | null;
   _count: { versions: number; links: number };
@@ -121,7 +121,7 @@ export function FileManager({ lockedProjectId }: { lockedProjectId?: string }) {
     const response = await fetch("/api/files/folders", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ projectId, parentId, name }),
+      body: JSON.stringify({ projectId: projectId || null, parentId, name }),
     });
     const body = await response.json();
     if (!response.ok) throw new Error(body.error || "创建失败");
@@ -150,7 +150,7 @@ export function FileManager({ lockedProjectId }: { lockedProjectId?: string }) {
     destinationFolderId: string | null = folderId,
     progress?: { current: number; total: number },
   ) {
-    if (!files?.length || !projectId) return;
+    if (!files?.length) return;
     const fileList = Array.from(files);
     for (let fileIndex = 0; fileIndex < fileList.length; fileIndex += 1) {
       const file = fileList[fileIndex];
@@ -162,7 +162,7 @@ export function FileManager({ lockedProjectId }: { lockedProjectId?: string }) {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            projectId,
+            projectId: projectId || null,
             folderId: destinationFolderId,
             fileId: targetFileId,
             name: file.name,
@@ -235,11 +235,11 @@ export function FileManager({ lockedProjectId }: { lockedProjectId?: string }) {
     }
   }
   async function uploadFolder(files: FileList | null) {
-    if (!files?.length || !projectId || !data) return;
+    if (!files?.length || !data) return;
     setError("");
     const folderCache = new Map<string, string>();
     for (const folder of data.treeFolders.filter(
-      (item) => item.projectId === projectId,
+      (item) => item.projectId === (projectId || null),
     )) {
       folderCache.set(`${folder.parentId || "ROOT"}\u0000${folder.name}`, folder.id);
     }
@@ -299,7 +299,7 @@ export function FileManager({ lockedProjectId }: { lockedProjectId?: string }) {
         </div>
         <div className="flex flex-wrap justify-end gap-2">
           <button
-            disabled={virtualRoot || trash}
+            disabled={trash}
             onClick={() => {
               setFolderName("");
               setFolderError("");
@@ -311,7 +311,7 @@ export function FileManager({ lockedProjectId }: { lockedProjectId?: string }) {
             新建文件夹
           </button>
           <button
-            disabled={virtualRoot || trash || data?.storage.blocked}
+            disabled={trash || data?.storage.blocked}
             onClick={() => input.current?.click()}
             className="primary-button disabled:opacity-50"
           >
@@ -319,7 +319,7 @@ export function FileManager({ lockedProjectId }: { lockedProjectId?: string }) {
             上传文件
           </button>
           <button
-            disabled={virtualRoot || trash || data?.storage.blocked}
+            disabled={trash || data?.storage.blocked}
             onClick={() => folderInput.current?.click()}
             className="secondary-button disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -378,7 +378,7 @@ export function FileManager({ lockedProjectId }: { lockedProjectId?: string }) {
                 }}
                 className="field mt-3"
               >
-                <option value="">全部项目</option>
+                <option value="">全局文件（含项目）</option>
                 {data.projects.map((project) => (
                   <option key={project.id} value={project.id}>
                     {project.name}
@@ -391,20 +391,17 @@ export function FileManager({ lockedProjectId }: { lockedProjectId?: string }) {
               className={`mt-3 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm ${!folderId ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-50"}`}
             >
               <Folder size={16} />
-              {virtualRoot ? "全部项目" : "根目录"}
+              {virtualRoot ? "全局文件" : "根目录"}
             </button>
-            {!virtualRoot && (
-              <FolderTree
-                folders={data.treeFolders.filter(
-                  (folder) => folder.projectId === projectId,
-                )}
-                parentId={null}
-                active={folderId}
-                choose={setFolderId}
-              />
-            )}
+            <FolderTree
+              folders={data.treeFolders.filter(
+                (folder) => folder.projectId === (projectId || null),
+              )}
+              parentId={null}
+              active={folderId}
+              choose={setFolderId}
+            />
             <button
-              disabled={virtualRoot}
               onClick={() => {
                 setTrash(!trash);
                 setFolderId(null);
@@ -453,7 +450,7 @@ export function FileManager({ lockedProjectId }: { lockedProjectId?: string }) {
                 {projectId
                   ? data.projects.find((project) => project.id === projectId)
                       ?.name || "项目"
-                  : "全部项目"}
+                  : "全局文件"}
               </button>
               {crumbs.map((folder) => (
                 <span key={folder.id} className="flex items-center gap-1">
@@ -486,7 +483,7 @@ export function FileManager({ lockedProjectId }: { lockedProjectId?: string }) {
                       </tr>
                     </thead>
                     <tbody>
-                      {virtualRoot &&
+                      {virtualRoot && !folderId && !trash &&
                         data.projects
                           .filter((item) =>
                             item.name.toLowerCase().includes(query.toLowerCase()),
@@ -527,10 +524,10 @@ export function FileManager({ lockedProjectId }: { lockedProjectId?: string }) {
                               </td>
                             </tr>
                           ))}
-                      {!virtualRoot && data.folders.map((folder) => (
+                      {data.folders.map((folder) => (
                         <tr
                           key={folder.id}
-                          onDoubleClick={() => setFolderId(folder.id)}
+                          onClick={() => setFolderId(folder.id)}
                           className="cursor-pointer border-b hover:bg-slate-50"
                         >
                           <td className="px-5 py-3">
@@ -542,7 +539,7 @@ export function FileManager({ lockedProjectId }: { lockedProjectId?: string }) {
                             </div>
                           </td>
                           <td className="px-4 text-sm text-slate-500">
-                            {folder.project?.name}
+                            {folder.project?.name || "未归属项目"}
                           </td>
                           <td className="px-4 text-sm text-slate-400">—</td>
                           <td className="px-4 text-sm text-slate-500">
@@ -554,7 +551,7 @@ export function FileManager({ lockedProjectId }: { lockedProjectId?: string }) {
                           <td />
                         </tr>
                       ))}
-                      {!virtualRoot && visibleFiles.map((file) => (
+                      {visibleFiles.map((file) => (
                         <tr
                           key={file.id}
                           className="border-b last:border-0 hover:bg-slate-50"
@@ -582,7 +579,7 @@ export function FileManager({ lockedProjectId }: { lockedProjectId?: string }) {
                             </button>
                           </td>
                           <td className="px-4 text-sm text-slate-500">
-                            {file.project.name}
+                            {file.project?.name || "未归属项目"}
                           </td>
                           <td className="px-4 text-sm text-slate-500">
                             {formatSize(file.size)}
@@ -606,10 +603,9 @@ export function FileManager({ lockedProjectId }: { lockedProjectId?: string }) {
                       ))}
                     </tbody>
                   </table>
-                  {((virtualRoot && !data.projects.length) ||
-                    (!virtualRoot &&
-                      !data.folders.length &&
-                      !visibleFiles.length)) && (
+                  {!data.folders.length &&
+                    !visibleFiles.length &&
+                    (!virtualRoot || folderId || trash || !data.projects.length) && (
                     <div className="p-14 text-center text-sm text-slate-400">
                       当前目录为空
                     </div>
@@ -630,7 +626,7 @@ export function FileManager({ lockedProjectId }: { lockedProjectId?: string }) {
         <FolderDialog
           name={folderName}
           setName={setFolderName}
-          location={[project?.name || "项目", ...crumbs.map((item) => item.name)].join(
+          location={[project?.name || "未归属项目", ...crumbs.map((item) => item.name)].join(
             " / ",
           )}
           error={folderError}

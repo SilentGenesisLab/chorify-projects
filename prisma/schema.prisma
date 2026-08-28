@@ -341,14 +341,14 @@ model Release {
 
 model FileFolder {
   id        String       @id @default(cuid())
-  projectId String
+  projectId String?
   parentId  String?
   name      String
   path      String
   sortOrder Int          @default(0)
   creatorId String
   deletedAt DateTime?
-  project   Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project   Project?     @relation(fields: [projectId], references: [id], onDelete: Cascade)
   parent    FileFolder?  @relation("FolderTree", fields: [parentId], references: [id], onDelete: Restrict)
   children  FileFolder[] @relation("FolderTree")
   creator   User         @relation("FolderCreator", fields: [creatorId], references: [id])
@@ -362,7 +362,7 @@ model FileFolder {
 
 model FileAsset {
   id               String         @id @default(cuid())
-  projectId        String
+  projectId        String?
   folderId         String?
   creatorId        String?
   name             String
@@ -372,7 +372,7 @@ model FileAsset {
   currentVersionId String?        @unique
   tags             String[]
   deletedAt        DateTime?
-  project          Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project          Project?       @relation(fields: [projectId], references: [id], onDelete: Cascade)
   folder           FileFolder?    @relation(fields: [folderId], references: [id], onDelete: SetNull)
   creator          User?          @relation("FileCreator", fields: [creatorId], references: [id])
   versions         FileVersion[]  @relation("FileVersions")
@@ -406,7 +406,7 @@ model FileVersion {
 
 model FileUploadSession {
   id          String   @id @default(cuid())
-  projectId   String
+  projectId   String?
   folderId    String?
   fileId      String?
   userId      String
@@ -417,7 +417,7 @@ model FileUploadSession {
   multipartId String
   status      String   @default("PENDING")
   expiresAt   DateTime
-  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project     Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -427,7 +427,7 @@ model FileUploadSession {
 
 model FileShare {
   id           String    @id @default(cuid())
-  projectId    String
+  projectId    String?
   fileId       String
   creatorId    String
   tokenHash    String    @unique
@@ -436,7 +436,7 @@ model FileShare {
   maxDownloads Int?
   downloads    Int       @default(0)
   revokedAt    DateTime?
-  project      Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project      Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   file         FileAsset @relation(fields: [fileId], references: [id], onDelete: Cascade)
   creator      User      @relation("ShareCreator", fields: [creatorId], references: [id])
   createdAt    DateTime  @default(now())
