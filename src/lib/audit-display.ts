@@ -3,6 +3,8 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   CREATE_TEAM: "创建团队",
   UPDATE_TEAM_PROFILE: "更新团队资料",
   CREATE_PROJECT: "创建项目",
+  UPDATE_PROJECT_PROFILE: "更新项目资料",
+  DELETE_PROJECT: "删除项目",
   CREATE_TEAM_INVITE: "创建邀请链接",
   ACCEPT_TEAM_INVITE: "加入团队",
   REVOKE_TEAM_INVITE: "撤销邀请",
@@ -60,6 +62,7 @@ export const AUDIT_RESOURCE_LABELS: Record<string, string> = {
 
 export const DASHBOARD_ACTIVITY_ACTIONS = new Set([
   "CREATE_PROJECT",
+  "UPDATE_PROJECT_PROFILE",
   "ADD_PROJECT_MEMBERS",
   "UPDATE_PROJECT_MEMBER",
   "REMOVE_PROJECT_MEMBER",

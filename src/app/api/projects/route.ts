@@ -8,9 +8,13 @@ export async function GET(request: NextRequest) {
   if (!userId) return NextResponse.json({ error: "请先登录" }, { status: 401 });
   const [teams, projects] = await Promise.all([
     prisma.teamMember.findMany({ where: { userId, role: { in: ["OWNER", "ADMIN"] } }, include: { team: { select: { id: true, name: true } } }, orderBy: { joinedAt: "desc" } }),
-    prisma.project.findMany({ where: { OR: [{ team: { members: { some: { userId, role: { in: ["OWNER", "ADMIN"] } } } } }, { members: { some: { userId } } }] }, include: { team: { select: { id: true, name: true } }, _count: { select: { members: true, tasks: true } } }, orderBy: { updatedAt: "desc" } }),
+    prisma.project.findMany({ where: { OR: [{ team: { members: { some: { userId, role: { in: ["OWNER", "ADMIN"] } } } } }, { members: { some: { userId } } }] }, include: { team: { select: { id: true, name: true, members: { where: { userId }, select: { role: true } } } }, members: { where: { userId }, select: { role: true } }, _count: { select: { members: true, tasks: true } } }, orderBy: { updatedAt: "desc" } }),
   ]);
-  return NextResponse.json({ teams: teams.map((item) => item.team), projects: projects.map((item) => ({ id: item.id, code: item.code, name: item.name, description: item.description, status: item.status, team: item.team, memberCount: item._count.members, taskCount: item._count.tasks, updatedAt: item.updatedAt })) });
+  return NextResponse.json({ teams: teams.map((item) => item.team), projects: projects.map((item) => {
+    const projectRole = item.members[0]?.role;
+    const teamRole = item.team.members[0]?.role;
+    return { id: item.id, code: item.code, name: item.name, description: item.description, status: item.status, startDate: item.startDate, endDate: item.endDate, team: { id: item.team.id, name: item.team.name }, memberCount: item._count.members, taskCount: item._count.tasks, canManage: projectRole === "OWNER" || projectRole === "MANAGER" || teamRole === "OWNER" || teamRole === "ADMIN", canDelete: projectRole === "OWNER" || teamRole === "OWNER" || teamRole === "ADMIN", updatedAt: item.updatedAt };
+  }) });
 }
 
 export async function POST(request: NextRequest) {

@@ -8,6 +8,7 @@ import { FileManager } from "@/components/file-manager";
 import { SelectField } from "@/components/ui/select-field";
 import {
   Bug,
+  AlertTriangle,
   Check,
   CheckCircle2,
   ChevronRight,
@@ -18,6 +19,7 @@ import {
   ListChecks,
   LoaderCircle,
   MoreHorizontal,
+  Pencil,
   Plus,
   Rocket,
   Search,
@@ -34,6 +36,10 @@ type Project = {
   name: string;
   description: string;
   status: string;
+  startDate: string | null;
+  endDate: string | null;
+  canManage: boolean;
+  canDelete: boolean;
   team: { id: string; name: string };
   memberCount: number;
   taskCount: number;
@@ -63,6 +69,9 @@ export function ProjectsPage({
     [teams, setTeams] = useState<Team[]>([]),
     [loading, setLoading] = useState(true),
     [open, setOpen] = useState(false),
+    [menuId, setMenuId] = useState(""),
+    [editing, setEditing] = useState<Project | null>(null),
+    [deleting, setDeleting] = useState<Project | null>(null),
     [error, setError] = useState("");
   const load = useCallback(async () => {
     setLoading(true);
@@ -154,17 +163,23 @@ export function ProjectsPage({
       )}
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {projects.map((project) => (
-          <Link
-            href={`/projects/${project.id}`}
+          <article
             key={project.id}
-            className="card group p-5 transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md"
+            className="card group relative p-5 transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md"
           >
             <div className="flex items-start">
               <span className="grid size-11 place-items-center rounded-xl bg-blue-50 text-blue-600">
                 <FolderKanban size={21} />
               </span>
-              <MoreHorizontal className="ml-auto text-slate-400" size={19} />
+              {(project.canManage || project.canDelete) && <div className="relative ml-auto">
+                <button type="button" aria-label={`管理 ${project.name}`} aria-expanded={menuId === project.id} onClick={() => setMenuId((value) => value === project.id ? "" : project.id)} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"><MoreHorizontal size={19} /></button>
+                {menuId === project.id && <div className="absolute right-0 top-10 z-20 w-40 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl">
+                  {project.canManage && <button type="button" onClick={() => { setMenuId(""); setEditing(project); }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-slate-600 hover:bg-slate-50"><Pencil size={15}/>编辑基本信息</button>}
+                  {project.canDelete && <button type="button" onClick={() => { setMenuId(""); setDeleting(project); }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-rose-600 hover:bg-rose-50"><Trash2 size={15}/>删除项目</button>}
+                </div>}
+              </div>}
             </div>
+            <Link href={`/projects/${project.id}`} className="block">
             <div className="mt-5 flex items-center gap-2">
               <h3 className="font-semibold group-hover:text-blue-700">
                 {project.name}
@@ -188,7 +203,8 @@ export function ProjectsPage({
                 size={17}
               />
             </div>
-          </Link>
+            </Link>
+          </article>
         ))}
       </div>
       {!projects.length && (
@@ -206,6 +222,8 @@ export function ProjectsPage({
           }}
         />
       )}
+      {editing && <EditProject project={editing} onClose={() => setEditing(null)} onSaved={async () => { setEditing(null); await load(); }} />}
+      {deleting && <DeleteProject project={deleting} onClose={() => setDeleting(null)} onDeleted={async () => { setDeleting(null); await load(); }} />}
     </div>
   );
 }
@@ -399,6 +417,29 @@ function PullTeamMembers({projectId,teamName,members,canAssignManagers,onClose,o
 }
 
 function ProjectAvatar({name,color}:{name:string;color:string}){return <span className="grid size-9 shrink-0 place-items-center rounded-full text-xs font-semibold text-white ring-2 ring-white" style={{backgroundColor:color}}>{name.slice(-1)}</span>}
+
+const projectDateInput = (value: string | null) => value ? new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(value)) : "";
+const projectDateIso = (value: string) => value ? new Date(`${value}T00:00:00+08:00`).toISOString() : null;
+
+function EditProject({ project, onClose, onSaved }: { project: Project; onClose: () => void; onSaved: () => void }) {
+  const [name, setName] = useState(project.name), [description, setDescription] = useState(project.description), [status, setStatus] = useState(project.status), [startDate, setStartDate] = useState(projectDateInput(project.startDate)), [endDate, setEndDate] = useState(projectDateInput(project.endDate)), [saving, setSaving] = useState(false), [error, setError] = useState("");
+  async function submit(event: FormEvent) {
+    event.preventDefault(); setSaving(true); setError("");
+    try { await projectRequest(`/api/projects/${project.id}`, { method: "PATCH", body: JSON.stringify({ name, description, status, startDate: projectDateIso(startDate), endDate: projectDateIso(endDate) }) }); onSaved(); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "保存失败"); setSaving(false); }
+  }
+  return <div className="fixed inset-0 z-[70] grid place-items-center bg-slate-950/35 p-4 backdrop-blur-sm" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><form onSubmit={submit} className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-2xl"><div className="flex items-start"><div><h3 className="text-lg font-semibold">编辑项目基本信息</h3><p className="mt-1 text-sm text-slate-500">项目标识和所属团队创建后不可修改</p></div><button type="button" onClick={onClose} className="ml-auto rounded-lg p-2 text-slate-400 hover:bg-slate-100"><X size={18}/></button></div><div className="mt-5 grid gap-4 sm:grid-cols-2"><label className="sm:col-span-2"><span className="mb-2 block text-sm font-medium">项目名称</span><input required minLength={2} maxLength={60} className="field" value={name} onChange={(event) => setName(event.target.value)}/></label><label><span className="mb-2 block text-sm font-medium">项目标识</span><input disabled className="field bg-slate-50 text-slate-400" value={project.code}/></label><label><span className="mb-2 block text-sm font-medium">所属团队</span><input disabled className="field bg-slate-50 text-slate-400" value={project.team.name}/></label><label><span className="mb-2 block text-sm font-medium">项目状态</span><SelectField value={status} onChange={setStatus} options={[{value:"ACTIVE",label:"进行中"},{value:"PAUSED",label:"已暂停"},{value:"COMPLETED",label:"已完成"},{value:"ARCHIVED",label:"已归档"}]}/></label><div/><label><span className="mb-2 block text-sm font-medium">开始日期</span><input type="date" className="field" value={startDate} onChange={(event) => setStartDate(event.target.value)}/></label><label><span className="mb-2 block text-sm font-medium">结束日期</span><input type="date" className="field" value={endDate} onChange={(event) => setEndDate(event.target.value)}/></label><label className="sm:col-span-2"><span className="mb-2 block text-sm font-medium">项目说明</span><textarea maxLength={300} className="field min-h-24 resize-y" value={description} onChange={(event) => setDescription(event.target.value)}/><span className="mt-1 block text-right text-xs text-slate-400">{description.length}/300</span></label></div>{error && <div className="mt-4 rounded-xl bg-rose-50 p-3 text-sm text-rose-700">{error}</div>}<div className="mt-6 flex justify-end gap-2"><button type="button" onClick={onClose} className="secondary-button">取消</button><button disabled={saving} className="primary-button">{saving && <LoaderCircle className="animate-spin" size={16}/>}保存修改</button></div></form></div>;
+}
+
+function DeleteProject({ project, onClose, onDeleted }: { project: Project; onClose: () => void; onDeleted: () => void }) {
+  const [confirmation, setConfirmation] = useState(""), [deleting, setDeleting] = useState(false), [error, setError] = useState("");
+  async function submit(event: FormEvent) {
+    event.preventDefault(); setDeleting(true); setError("");
+    try { await projectRequest(`/api/projects/${project.id}`, { method: "DELETE", body: JSON.stringify({ confirmName: confirmation }) }); onDeleted(); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "删除失败"); setDeleting(false); }
+  }
+  return <div className="fixed inset-0 z-[70] grid place-items-center bg-slate-950/40 p-4 backdrop-blur-sm" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><form onSubmit={submit} className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl"><div className="flex items-start gap-3"><span className="grid size-11 shrink-0 place-items-center rounded-xl bg-rose-50 text-rose-600"><AlertTriangle size={21}/></span><div><h3 className="text-lg font-semibold">删除项目</h3><p className="mt-1 text-sm leading-6 text-slate-500">此操作会永久删除项目中的需求、任务、Bug、版本、成员关系和项目文件，无法恢复。</p></div><button type="button" onClick={onClose} className="ml-auto rounded-lg p-2 text-slate-400 hover:bg-slate-100"><X size={18}/></button></div><div className="mt-5 rounded-xl border border-rose-100 bg-rose-50/60 p-4 text-sm text-slate-600">请输入项目名称 <b className="text-slate-900">{project.name}</b> 确认删除。</div><label className="mt-4 block"><span className="mb-2 block text-sm font-medium">项目名称</span><input autoFocus className="field" value={confirmation} onChange={(event) => setConfirmation(event.target.value)} placeholder={project.name}/></label>{error && <div className="mt-4 rounded-xl bg-rose-50 p-3 text-sm text-rose-700">{error}</div>}<div className="mt-6 flex justify-end gap-2"><button type="button" onClick={onClose} className="secondary-button">取消</button><button disabled={deleting || confirmation !== project.name} className="inline-flex h-10 items-center gap-2 rounded-xl bg-rose-600 px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40">{deleting && <LoaderCircle className="animate-spin" size={16}/>}永久删除</button></div></form></div>;
+}
 
 function CreateProject({
   teams,
