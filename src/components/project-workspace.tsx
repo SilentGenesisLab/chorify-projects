@@ -15,6 +15,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import { SelectField } from "@/components/ui/select-field";
 
 type Module = "requirements" | "tasks" | "bugs" | "versions" | "releases";
 type Item = Record<string, unknown> & {
@@ -274,18 +275,15 @@ export function ProjectWorkspace({
             className="min-w-0 flex-1 bg-transparent text-sm outline-none"
           />
         </label>
-        <select
+        <SelectField
           value={status}
-          onChange={(e) => setStatus(e.target.value)}
-          className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm"
-        >
-          <option value="ALL">全部状态</option>
-          {statuses[active].map((x) => (
-            <option key={x} value={x}>
-              {labels[x] || x}
-            </option>
-          ))}
-        </select>
+          onChange={setStatus}
+          className="min-w-36"
+          options={[
+            { value: "ALL", label: "全部状态" },
+            ...statuses[active].map((value) => ({ value, label: labels[value] || value })),
+          ]}
+        />
       </div>
       <section className="card overflow-hidden">
         {!filtered.length ? (
@@ -880,17 +878,14 @@ function Select({
   return (
     <label>
       <span className="mb-2 block text-sm font-medium">{label}</span>
-      <select
+      <SelectField
         value={value}
-        onChange={(e) => set(e.target.value)}
-        className="field"
-      >
-        {options.map((x) => (
-          <option key={x} value={x}>
-            {labels[x] || x}
-          </option>
-        ))}
-      </select>
+        onChange={set}
+        options={options.map((option) => ({
+          value: option,
+          label: labels[option] || option,
+        }))}
+      />
     </label>
   );
 }
@@ -910,20 +905,18 @@ function LookupSelect({
   return (
     <label>
       <span className="mb-2 block text-sm font-medium">{label}</span>
-      <select
-        required={!optional}
+      <SelectField
         value={value}
-        onChange={(e) => set(e.target.value)}
-        className="field"
-      >
-        <option value="">{optional ? "不关联" : "请选择"}</option>
-        {items.map((x) => (
-          <option key={String(x.id)} value={String(x.id)}>
-            {String(x.code ? `${x.code} · ` : "")}
-            {String(x.title || x.name)}
-          </option>
-        ))}
-      </select>
+        onChange={set}
+        placeholder={optional ? "不关联" : "请选择"}
+        options={[
+          { value: "", label: optional ? "不关联" : "请选择" },
+          ...items.map((item) => ({
+            value: String(item.id),
+            label: `${String(item.code ? `${item.code} · ` : "")}${String(item.title || item.name)}`,
+          })),
+        ]}
+      />
     </label>
   );
 }

@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Activity, Bot, ChevronDown, Download, Eye, KeyRound, LoaderCircle, Search, UserRound, X } from "lucide-react";
+import { Activity, Bot, Download, Eye, KeyRound, LoaderCircle, Search, UserRound, X } from "lucide-react";
+import { SelectField } from "@/components/ui/select-field";
 
 type Project = { id: string; code: string; name: string };
 type Log = {
@@ -52,9 +53,9 @@ export function AuditLogPage() {
     <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><h2 className="text-2xl font-bold tracking-tight">操作日志</h2><p className="mt-1 text-sm text-slate-500">查看真人网页操作，以及 Codex 等工具通过 API Key 进行的项目操作</p></div><button onClick={exportCsv} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-[#376ce7] px-4 text-sm font-semibold text-white"><Download size={17}/>导出日志</button></div>
     <div className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 sm:grid-cols-2 xl:grid-cols-[minmax(240px,1fr)_180px_160px_150px_auto]">
       <label className="flex h-10 items-center gap-2 rounded-xl border border-slate-200 px-3 text-slate-400"><Search size={16}/><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="搜索操作者、操作、资源或 Key" className="min-w-0 flex-1 bg-transparent text-sm text-slate-700 outline-none"/></label>
-      <Select value={project} onChange={setProject} options={[{ value: "ALL", label: "全部项目" }, ...projects.map((x) => ({ value: x.id, label: `${x.code} · ${x.name}` }))]}/>
-      <Select value={channel} onChange={setChannel} options={[{value:"ALL",label:"全部来源"},{value:"WEB",label:"网页操作"},{value:"API",label:"API Key"}]}/>
-      <Select value={result} onChange={setResult} options={[{value:"ALL",label:"全部结果"},{value:"SUCCESS",label:"成功"},{value:"DENIED",label:"拒绝"},{value:"FAILED",label:"失败"}]}/>
+      <SelectField value={project} onChange={setProject} options={[{ value: "ALL", label: "全部项目" }, ...projects.map((x) => ({ value: x.id, label: `${x.code} · ${x.name}` }))]}/>
+      <SelectField value={channel} onChange={setChannel} options={[{value:"ALL",label:"全部来源"},{value:"WEB",label:"网页操作"},{value:"API",label:"API Key"}]}/>
+      <SelectField value={result} onChange={setResult} options={[{value:"ALL",label:"全部结果"},{value:"SUCCESS",label:"成功"},{value:"DENIED",label:"拒绝"},{value:"FAILED",label:"失败"}]}/>
       <div className="flex items-center justify-end text-sm text-slate-500">共 {filtered.length} 条</div>
     </div>
     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
@@ -69,5 +70,4 @@ export function AuditLogPage() {
   </div>;
 }
 
-function Select({ value, onChange, options }: { value: string; onChange: (value: string) => void; options: { value: string; label: string }[] }) { return <label className="relative"><select value={value} onChange={(e) => onChange(e.target.value)} className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-white pl-3 pr-9 text-sm text-slate-600 outline-none focus:border-blue-400">{options.map((x) => <option key={x.value} value={x.value}>{x.label}</option>)}</select><ChevronDown size={14} className="pointer-events-none absolute right-3 top-3 text-slate-400"/></label>; }
 function Result({ value }: { value: string }) { const style = value === "SUCCESS" ? "bg-emerald-50 text-emerald-700" : value === "DENIED" ? "bg-amber-50 text-amber-700" : "bg-rose-50 text-rose-700"; return <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${style}`}>{value === "SUCCESS" ? "成功" : value === "DENIED" ? "已拒绝" : "失败"}</span>; }

@@ -23,6 +23,7 @@ import {
   X,
 } from "lucide-react";
 import { parseFolderUploadPath } from "@/lib/folder-upload";
+import { SelectField } from "@/components/ui/select-field";
 
 type Project = { id: string; name: string; code: string };
 type FolderItem = {
@@ -370,21 +371,22 @@ export function FileManager({ lockedProjectId }: { lockedProjectId?: string }) {
               项目与目录
             </p>
             {!lockedProjectId && (
-              <select
+              <SelectField
                 value={projectId}
-                onChange={(event) => {
-                  setProjectId(event.target.value);
+                onChange={(value) => {
+                  setProjectId(value);
                   setFolderId(null);
                 }}
-                className="field mt-3"
-              >
-                <option value="">全局文件（含项目）</option>
-                {data.projects.map((project) => (
-                  <option key={project.id} value={project.id}>
-                    {project.name}
-                  </option>
-                ))}
-              </select>
+                className="mt-3"
+                options={[
+                  { value: "", label: "全局文件（含项目）" },
+                  ...data.projects.map((project) => ({
+                    value: project.id,
+                    label: project.name,
+                    description: project.code,
+                  })),
+                ]}
+              />
             )}
             <button
               onClick={() => setFolderId(null)}
