@@ -16,6 +16,8 @@ import {
   X,
 } from "lucide-react";
 import { SelectField } from "@/components/ui/select-field";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 type Module = "requirements" | "tasks" | "bugs" | "versions" | "releases";
 type Item = Record<string, unknown> & {
@@ -37,6 +39,7 @@ type Data = {
   bugs: Item[];
   versions: Item[];
   releases: Item[];
+  files: Array<{ id: string; name: string; mimeType: string; size: string }>;
   members: Array<{ id: string; name: string; role: string }>;
   permissions: { canWrite: boolean; canDelete: boolean };
 };
@@ -47,6 +50,7 @@ const empty: Data = {
   bugs: [],
   versions: [],
   releases: [],
+  files: [],
   members: [],
   permissions: { canWrite: false, canDelete: false },
 };
@@ -162,6 +166,37 @@ const fmt = (value: unknown) =>
       }).format(new Date(String(value)))
     : "—";
 const iso = (value: string) => (value ? new Date(value).toISOString() : null);
+const dateKey = (value: unknown) => {
+  if (!value) return "";
+  const date = new Date(String(value));
+  const pad = (part: number) => String(part).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+};
+const relatedName = (value: unknown) =>
+  value && typeof value === "object" && "name" in value
+    ? String((value as { name: unknown }).name)
+    : "未指定";
+function rowMeta(module: Module, item: Item) {
+  const code = item.code ? `${item.code} · ` : "";
+  if (module === "tasks")
+    return `${code}负责人：${relatedName(item.assignee)} · 提交：${fmt(item.submittedAt)} · 截止：${fmt(item.dueAt)}`;
+  if (module === "requirements")
+    return `${code}需求人：${relatedName(item.requester)} · 创建：${fmt(item.createdAt)} · 关闭：${fmt(item.closedAt)}`;
+  if (module === "versions") {
+    const participants = Array.isArray(item.participants) ? item.participants.length : 0;
+    return `负责人：${relatedName(item.owner)} · ${participants} 位参与人 · 计划发布：${fmt(item.plannedAt)}`;
+  }
+  return `${code}${labels[item.status] || item.status} · 更新于 ${fmt(item.updatedAt || item.createdAt)}`;
+}
+
+function DateFilter({ label, value, set }: { label: string; value: string; set: (value: string) => void }) {
+  return (
+    <label className="flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-xs text-slate-500">
+      <span className="whitespace-nowrap">{label}</span>
+      <input type="date" value={value} onChange={(event) => set(event.target.value)} className="bg-transparent text-sm text-slate-700 outline-none" />
+    </label>
+  );
+}
 
 export function ProjectWorkspace({
   projectId,
@@ -175,6 +210,9 @@ export function ProjectWorkspace({
     [error, setError] = useState(""),
     [query, setQuery] = useState(""),
     [status, setStatus] = useState("ALL"),
+    [assigneeId, setAssigneeId] = useState("ALL"),
+    [submittedDate, setSubmittedDate] = useState(""),
+    [dueDate, setDueDate] = useState(""),
     [dialog, setDialog] = useState<{
       module: Module;
       item: Item | null;
@@ -207,9 +245,12 @@ export function ProjectWorkspace({
           `${x.code || ""}${x.title || x.name || ""}`
             .toLowerCase()
             .includes(query.toLowerCase()) &&
-          (status === "ALL" || x.status === status),
+          (status === "ALL" || x.status === status) &&
+          (active !== "tasks" || assigneeId === "ALL" || x.assigneeId === assigneeId) &&
+          (active !== "tasks" || !submittedDate || dateKey(x.submittedAt) === submittedDate) &&
+          (active !== "tasks" || !dueDate || dateKey(x.dueAt) === dueDate),
       ),
-    [items, query, status],
+    [active, assigneeId, dueDate, items, query, status, submittedDate],
   );
   async function remove(item: Item) {
     if (
@@ -284,6 +325,21 @@ export function ProjectWorkspace({
             ...statuses[active].map((value) => ({ value, label: labels[value] || value })),
           ]}
         />
+        {active === "tasks" && (
+          <>
+            <SelectField
+              value={assigneeId}
+              onChange={setAssigneeId}
+              className="min-w-36"
+              options={[
+                { value: "ALL", label: "全部负责人" },
+                ...data.members.map((member) => ({ value: member.id, label: member.name })),
+              ]}
+            />
+            <DateFilter label="提交日期" value={submittedDate} set={setSubmittedDate} />
+            <DateFilter label="截止日期" value={dueDate} set={setDueDate} />
+          </>
+        )}
       </div>
       <section className="card overflow-hidden">
         {!filtered.length ? (
@@ -309,9 +365,7 @@ export function ProjectWorkspace({
                     {String(item.title || item.name)}
                   </p>
                   <p className="mt-1 text-xs text-slate-400">
-                    {item.code ? `${item.code} · ` : ""}
-                    {labels[item.status] || item.status} · 更新于{" "}
-                    {fmt(item.updatedAt || item.createdAt)}
+                    {rowMeta(active, item)}
                   </p>
                 </button>
                 {(item.priority || item.severity) && (
@@ -570,11 +624,38 @@ function Fields({
           value={form.plannedAt as string}
           set={(v) => set("plannedAt", v)}
         />
+        <LookupSelect
+          label="负责人"
+          value={form.ownerId as string}
+          set={(v) => set("ownerId", v)}
+          items={data.members}
+          optional
+        />
+        <MultiSelect
+          label="参与成员"
+          values={form.participantIds as string[]}
+          set={(v) => set("participantIds", v)}
+          items={data.members}
+        />
         <Area
           label="版本目标"
           value={form.goal as string}
           set={(v) => set("goal", v)}
           wide
+        />
+        <Area
+          label="版本描述（支持 Markdown）"
+          value={form.description as string}
+          set={(v) => set("description", v)}
+          wide
+        />
+        <MarkdownPreview value={form.description as string} />
+        <MultiSelect
+          label="引用项目文件"
+          values={form.fileIds as string[]}
+          set={(v) => set("fileIds", v)}
+          items={data.files}
+          emptyText="当前项目暂无可引用文件，请先到文件管理上传"
         />
       </>
     );
@@ -644,13 +725,21 @@ function Fields({
         options={statuses[module]}
       />
       {module === "requirements" && (
-        <LookupSelect
-          label="目标版本"
-          value={form.targetVersionId as string}
-          set={(v) => set("targetVersionId", v)}
-          items={data.versions}
-          optional
-        />
+        <>
+          <LookupSelect
+            label="目标版本"
+            value={form.targetVersionId as string}
+            set={(v) => set("targetVersionId", v)}
+            items={data.versions}
+            optional
+          />
+          <MultiSelect
+            label="需求参与成员"
+            values={form.participantIds as string[]}
+            set={(v) => set("participantIds", v)}
+            items={data.members}
+          />
+        </>
       )}
       {module === "tasks" && (
         <>
@@ -767,6 +856,10 @@ function initial(module: Module, item: Item | null): FormState {
       goal: String(d.goal || ""),
       status: String(d.status || "PLANNING"),
       plannedAt: dt(d.plannedAt),
+      description: String(d.description || ""),
+      ownerId: String(d.ownerId || ""),
+      participantIds: participantIds(d.participants),
+      fileIds: Array.isArray(d.fileIds) ? (d.fileIds as string[]) : [],
     };
   if (module === "releases")
     return {
@@ -804,7 +897,13 @@ function initial(module: Module, item: Item | null): FormState {
           (x) => x.dependsOnId,
         )
       : [],
+    participantIds: participantIds(d.participants),
   };
+}
+function participantIds(value: unknown) {
+  return Array.isArray(value)
+    ? value.map((entry) => String((entry as { userId?: string }).userId || "")).filter(Boolean)
+    : [];
 }
 function Badge({ value }: { value: string }) {
   return (
@@ -925,11 +1024,13 @@ function MultiSelect({
   values,
   set,
   items,
+  emptyText = "暂无可选项",
 }: {
   label: string;
   values: string[];
   set: (v: string[]) => void;
-  items: Item[];
+  items: Array<Record<string, unknown> & { id: string }>;
+  emptyText?: string;
 }) {
   return (
     <label className="sm:col-span-2">
@@ -952,13 +1053,24 @@ function MultiSelect({
                   )
                 }
               />
-              {x.code} · {x.title}
+              {x.code ? `${String(x.code)} · ` : ""}{String(x.title || x.name)}
             </label>
           ))
         ) : (
-          <span className="block p-2 text-sm text-slate-400">暂无其他任务</span>
+          <span className="block p-2 text-sm text-slate-400">{emptyText}</span>
         )}
       </div>
     </label>
+  );
+}
+
+function MarkdownPreview({ value }: { value: string }) {
+  return (
+    <div className="sm:col-span-2">
+      <span className="mb-2 block text-sm font-medium">Markdown 预览</span>
+      <div className="min-h-24 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-700 [&_a]:text-blue-600 [&_blockquote]:border-l-2 [&_blockquote]:border-slate-300 [&_blockquote]:pl-3 [&_code]:rounded [&_code]:bg-slate-200 [&_code]:px-1 [&_h1]:text-xl [&_h1]:font-bold [&_h2]:text-lg [&_h2]:font-semibold [&_li]:ml-5 [&_li]:list-disc [&_p+p]:mt-2">
+        {value.trim() ? <ReactMarkdown remarkPlugins={[remarkGfm]}>{value}</ReactMarkdown> : <span className="text-slate-400">输入版本描述后在这里预览</span>}
+      </div>
+    </div>
   );
 }

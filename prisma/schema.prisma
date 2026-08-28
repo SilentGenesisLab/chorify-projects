@@ -97,6 +97,10 @@ model User {
   uploadedVersions FileVersion[]       @relation("VersionUploader")
   createdShares    FileShare[]         @relation("ShareCreator")
   uploadSessions   FileUploadSession[]
+  requestedRequirements Requirement[]  @relation("RequirementRequester")
+  requirementParticipations RequirementParticipant[]
+  ownedVersions    Version[]           @relation("VersionOwner")
+  versionParticipations VersionParticipant[]
   createdAt        DateTime            @default(now())
   updatedAt        DateTime            @updatedAt
 }
@@ -208,12 +212,26 @@ model Requirement {
   priority           Priority
   status             String
   targetVersionId    String?
+  requesterId        String?
+  closedAt           DateTime?
   project            Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   targetVersion      Version? @relation(fields: [targetVersionId], references: [id])
+  requester          User?    @relation("RequirementRequester", fields: [requesterId], references: [id])
+  participants       RequirementParticipant[]
   tasks              Task[]
   bugs               Bug[]
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
+}
+
+model RequirementParticipant {
+  requirementId String
+  userId        String
+  requirement   Requirement @relation(fields: [requirementId], references: [id], onDelete: Cascade)
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([requirementId, userId])
+  @@index([userId])
 }
 
 model Task {
@@ -310,9 +328,13 @@ model Version {
   projectId    String
   name         String
   goal         String
+  description  String        @default("")
+  ownerId      String?
   status       VersionStatus @default(PLANNING)
   plannedAt    DateTime?
   project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  owner        User?         @relation("VersionOwner", fields: [ownerId], references: [id])
+  participants VersionParticipant[]
   requirements Requirement[]
   tasks        Task[]
   foundBugs    Bug[]         @relation("FoundVersion")
@@ -322,6 +344,16 @@ model Version {
   updatedAt    DateTime      @updatedAt
 
   @@unique([projectId, name])
+}
+
+model VersionParticipant {
+  versionId String
+  userId    String
+  version   Version @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([versionId, userId])
+  @@index([userId])
 }
 
 model Release {

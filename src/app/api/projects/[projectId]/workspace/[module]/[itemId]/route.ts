@@ -14,6 +14,7 @@ const baseSchemas = {
     priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]),
     status: z.string().min(1).max(30),
     targetVersionId: ids,
+    participantIds: z.array(z.string().cuid()).default([]),
   }),
   tasks: z.object({
     title: z.string().min(2).max(120),
@@ -72,6 +73,10 @@ const baseSchemas = {
       "CANCELLED",
     ]),
     plannedAt: z.string().datetime().nullable().optional(),
+    description: z.string().max(20000),
+    ownerId: ids,
+    participantIds: z.array(z.string().cuid()).default([]),
+    fileIds: z.array(z.string().cuid()).default([]),
   }),
   releases: z.object({
     versionId: z.string().cuid(),
@@ -140,6 +145,21 @@ export async function PATCH(
       { status: 400 },
     );
   const data = clean(parsed.data as Record<string, unknown>);
+  const participantIds = (data.participantIds || []) as string[];
+  const fileIds = (data.fileIds || []) as string[];
+  const ownerId = data.ownerId as string | null | undefined;
+  const projectMemberIds = new Set(
+    (await prisma.projectMember.findMany({ where: { projectId }, select: { userId: true } })).map((x) => x.userId),
+  );
+  if (participantIds.some((id) => !projectMemberIds.has(id)))
+    return NextResponse.json({ error: "参与人必须是项目成员" }, { status: 400 });
+  if (module === "versions" && ownerId && ownerId !== userId && !projectMemberIds.has(ownerId))
+    return NextResponse.json({ error: "负责人必须是项目成员" }, { status: 400 });
+  if (module === "versions" && fileIds.length) {
+    const count = await prisma.fileAsset.count({ where: { id: { in: fileIds }, projectId, deletedAt: null } });
+    if (count !== new Set(fileIds).size)
+      return NextResponse.json({ error: "只能引用当前项目中有效的文件" }, { status: 400 });
+  }
   if (module === "tasks") {
     const { dependencyIds, ...taskData } = data;
     if ((dependencyIds as string[]).includes(itemId))
@@ -154,15 +174,50 @@ export async function PATCH(
         ? [prisma.taskDependency.createMany({ data: (dependencyIds as string[]).map((dependsOnId) => ({ taskId: itemId, dependsOnId })) })]
         : []),
     ]);
-  } else if (module === "requirements")
+  } else if (module === "requirements") {
+    const { participantIds: _participantIds, ...requirementData } = data;
+    void _participantIds;
+    const existing = await prisma.requirement.findUnique({ where: { id: itemId }, select: { closedAt: true } });
     await prisma.requirement.update({
       where: { id: itemId },
-      data: data as Prisma.RequirementUncheckedUpdateInput,
+      data: {
+        ...requirementData,
+        closedAt: data.status === "DONE" ? existing?.closedAt || new Date() : null,
+        participants: {
+          deleteMany: {},
+          ...(participantIds.length
+            ? { createMany: { data: [...new Set(participantIds)].map((participantId) => ({ userId: participantId })) } }
+            : {}),
+        },
+      } as Prisma.RequirementUpdateInput,
     });
+  }
   else if (module === "bugs")
     await prisma.bug.update({ where: { id: itemId }, data: data as Prisma.BugUncheckedUpdateInput });
-  else if (module === "versions")
-    await prisma.version.update({ where: { id: itemId }, data: data as Prisma.VersionUncheckedUpdateInput });
+  else if (module === "versions") {
+    const { participantIds: _participantIds, fileIds: _fileIds, ownerId: _ownerId, ...versionData } = data;
+    void _participantIds; void _fileIds; void _ownerId;
+    await prisma.$transaction(async (tx) => {
+      await tx.version.update({
+        where: { id: itemId },
+        data: {
+          ...versionData,
+          owner: { connect: { id: ownerId || userId } },
+          participants: {
+            deleteMany: {},
+            ...(participantIds.length
+              ? { createMany: { data: [...new Set(participantIds)].map((participantId) => ({ userId: participantId })) } }
+              : {}),
+          },
+        } as Prisma.VersionUpdateInput,
+      });
+      await tx.resourceLink.deleteMany({ where: { resourceType: "VERSION", resourceId: itemId } });
+      if (fileIds.length)
+        await tx.resourceLink.createMany({
+          data: [...new Set(fileIds)].map((fileId) => ({ fileId, resourceType: "VERSION", resourceId: itemId })),
+        });
+    });
+  }
   else
     await prisma.release.update({ where: { id: itemId }, data: data as Prisma.ReleaseUncheckedUpdateInput });
   await prisma.auditLog.create({
@@ -204,7 +259,10 @@ export async function DELETE(
     else if (module === "bugs")
       await prisma.bug.delete({ where: { id: itemId } });
     else if (module === "versions")
-      await prisma.version.delete({ where: { id: itemId } });
+      await prisma.$transaction([
+        prisma.resourceLink.deleteMany({ where: { resourceType: "VERSION", resourceId: itemId } }),
+        prisma.version.delete({ where: { id: itemId } }),
+      ]);
     else await prisma.release.delete({ where: { id: itemId } });
   } catch {
     return NextResponse.json(

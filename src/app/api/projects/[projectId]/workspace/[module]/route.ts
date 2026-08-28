@@ -14,6 +14,7 @@ const schemas = {
     priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]),
     status: z.string().trim().min(1).max(30),
     targetVersionId: optionalId,
+    participantIds: z.array(z.string().cuid()).default([]),
   }),
   tasks: z.object({
     title: z.string().trim().min(2).max(120),
@@ -78,6 +79,10 @@ const schemas = {
       ])
       .default("PLANNING"),
     plannedAt: z.string().datetime().nullable().optional(),
+    description: z.string().trim().max(20000).default(""),
+    ownerId: optionalId,
+    participantIds: z.array(z.string().cuid()).default([]),
+    fileIds: z.array(z.string().cuid()).default([]),
   }),
   releases: z.object({
     versionId: z.string().cuid(),
@@ -135,16 +140,40 @@ export async function POST(
       { status: 400 },
     );
   const data = clean(parsed.data as Record<string, unknown>);
+  const participantIds = (data.participantIds || []) as string[];
+  const fileIds = (data.fileIds || []) as string[];
+  const ownerId = data.ownerId as string | null | undefined;
+  const projectMemberIds = new Set(
+    (await prisma.projectMember.findMany({ where: { projectId }, select: { userId: true } })).map((x) => x.userId),
+  );
+  if (participantIds.some((id) => !projectMemberIds.has(id)))
+    return NextResponse.json({ error: "参与人必须是项目成员" }, { status: 400 });
+  if (module === "versions" && ownerId && ownerId !== userId && !projectMemberIds.has(ownerId))
+    return NextResponse.json({ error: "负责人必须是项目成员" }, { status: 400 });
+  if (module === "versions" && fileIds.length) {
+    const count = await prisma.fileAsset.count({ where: { id: { in: fileIds }, projectId, deletedAt: null } });
+    if (count !== new Set(fileIds).size)
+      return NextResponse.json({ error: "只能引用当前项目中有效的文件" }, { status: 400 });
+  }
   const code = `${(await prisma.project.findUniqueOrThrow({ where: { id: projectId }, select: { code: true } })).code}-${Date.now().toString().slice(-8)}`;
   let item: { id: string };
-  if (module === "requirements")
+  if (module === "requirements") {
+    const { participantIds: _participantIds, targetVersionId, ...requirementData } = data;
+    void _participantIds;
     item = await prisma.requirement.create({
       data: {
-        ...data,
+        ...requirementData,
         code,
-        projectId,
-      } as Prisma.RequirementUncheckedCreateInput,
+        project: { connect: { id: projectId } },
+        requester: { connect: { id: userId } },
+        targetVersion: targetVersionId ? { connect: { id: targetVersionId as string } } : undefined,
+        closedAt: data.status === "DONE" ? new Date() : null,
+        participants: participantIds.length
+          ? { createMany: { data: [...new Set(participantIds)].map((participantId) => ({ userId: participantId })) } }
+          : undefined,
+      } as unknown as Prisma.RequirementCreateInput,
     });
+  }
   else if (module === "tasks") {
     const { dependencyIds, ...taskData } = data;
     item = await prisma.task.create({
@@ -161,10 +190,27 @@ export async function POST(
     item = await prisma.bug.create({
       data: { ...data, code, projectId } as Prisma.BugUncheckedCreateInput,
     });
-  else if (module === "versions")
-    item = await prisma.version.create({
-      data: { ...data, projectId } as Prisma.VersionUncheckedCreateInput,
+  else if (module === "versions") {
+    const { participantIds: _participantIds, fileIds: _fileIds, ownerId: _ownerId, ...versionData } = data;
+    void _participantIds; void _fileIds; void _ownerId;
+    item = await prisma.$transaction(async (tx) => {
+      const version = await tx.version.create({
+        data: {
+          ...versionData,
+          owner: { connect: { id: ownerId || userId } },
+          project: { connect: { id: projectId } },
+          participants: participantIds.length
+            ? { createMany: { data: [...new Set(participantIds)].map((participantId) => ({ userId: participantId })) } }
+            : undefined,
+        } as unknown as Prisma.VersionCreateInput,
+      });
+      if (fileIds.length)
+        await tx.resourceLink.createMany({
+          data: [...new Set(fileIds)].map((fileId) => ({ fileId, resourceType: "VERSION", resourceId: version.id })),
+        });
+      return version;
     });
+  }
   else
     item = await prisma.release.create({
       data: { ...data, projectId } as Prisma.ReleaseUncheckedCreateInput,
