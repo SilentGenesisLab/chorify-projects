@@ -9,6 +9,7 @@ import {
   FileText,
   Folder,
   FolderPlus,
+  Globe2,
   HardDrive,
   Image as ImageIcon,
   Link2,
@@ -87,13 +88,12 @@ export function FileManager({ lockedProjectId }: { lockedProjectId?: string }) {
       const body = await response.json();
       if (!response.ok) throw new Error(body.error || "加载文件失败");
       setData(body);
-      if (!projectId && lockedProjectId) setProjectId(lockedProjectId);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "加载文件失败");
     } finally {
       setLoading(false);
     }
-  }, [projectId, folderId, trash, lockedProjectId]);
+  }, [projectId, folderId, trash]);
   useEffect(() => {
     void Promise.resolve().then(load);
   }, [load]);
@@ -118,6 +118,13 @@ export function FileManager({ lockedProjectId }: { lockedProjectId?: string }) {
   }, [data, folderId]);
   const project = data?.projects.find((item) => item.id === projectId);
   const virtualRoot = !lockedProjectId && !projectId;
+  function switchSpace(nextProjectId: string) {
+    setProjectId(nextProjectId);
+    setFolderId(null);
+    setTrash(false);
+    setSelected(null);
+    setError("");
+  }
   async function createFolderAt(parentId: string | null, name: string) {
     const response = await fetch("/api/files/folders", {
       method: "POST",
@@ -295,7 +302,9 @@ export function FileManager({ lockedProjectId }: { lockedProjectId?: string }) {
             {lockedProjectId ? "项目文件" : "文件管理"}
           </h2>
           <p className="mt-1 text-sm text-slate-500">
-            多级目录、文件版本与工作项引用统一管理
+            {lockedProjectId
+              ? "管理当前项目文件，也可切换查看全局文件"
+              : "多级目录、文件版本与工作项引用统一管理"}
           </p>
         </div>
         <div className="flex flex-wrap justify-end gap-2">
@@ -370,12 +379,46 @@ export function FileManager({ lockedProjectId }: { lockedProjectId?: string }) {
             <p className="px-2 text-xs font-semibold text-slate-400">
               项目与目录
             </p>
+            {lockedProjectId && (
+              <div className="mt-3 rounded-2xl bg-slate-50 p-1.5">
+                <div className="grid grid-cols-2 gap-1">
+                  <button
+                    type="button"
+                    onClick={() => switchSpace(lockedProjectId)}
+                    className={`flex items-center justify-center gap-1.5 rounded-xl px-2 py-2 text-xs font-medium transition ${
+                      projectId === lockedProjectId
+                        ? "bg-white text-blue-700 shadow-sm ring-1 ring-slate-200/70"
+                        : "text-slate-500 hover:bg-white/70 hover:text-slate-700"
+                    }`}
+                  >
+                    <Folder size={14} />
+                    当前项目
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => switchSpace("")}
+                    className={`flex items-center justify-center gap-1.5 rounded-xl px-2 py-2 text-xs font-medium transition ${
+                      !projectId
+                        ? "bg-white text-blue-700 shadow-sm ring-1 ring-slate-200/70"
+                        : "text-slate-500 hover:bg-white/70 hover:text-slate-700"
+                    }`}
+                  >
+                    <Globe2 size={14} />
+                    全局文件
+                  </button>
+                </div>
+                <p className="px-2 pb-1 pt-2 text-[11px] leading-4 text-slate-400">
+                  {projectId
+                    ? "这里的文件归属于当前项目"
+                    : "这里的文件不归属于具体项目"}
+                </p>
+              </div>
+            )}
             {!lockedProjectId && (
               <SelectField
                 value={projectId}
                 onChange={(value) => {
-                  setProjectId(value);
-                  setFolderId(null);
+                  switchSpace(value);
                 }}
                 className="mt-3"
                 options={[
