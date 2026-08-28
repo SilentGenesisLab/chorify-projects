@@ -19,8 +19,10 @@ import {
   Share2,
   Trash2,
   Upload,
+  UploadCloud,
   X,
 } from "lucide-react";
+import { parseFolderUploadPath } from "@/lib/folder-upload";
 
 type Project = { id: string; name: string; code: string };
 type FolderItem = {
@@ -64,8 +66,13 @@ export function FileManager({ lockedProjectId }: { lockedProjectId?: string }) {
     [error, setError] = useState(""),
     [selected, setSelected] = useState<string | null>(null),
     [versionTarget, setVersionTarget] = useState<string | null>(null),
-    [trash, setTrash] = useState(false);
+    [trash, setTrash] = useState(false),
+    [folderDialog, setFolderDialog] = useState(false),
+    [folderName, setFolderName] = useState(""),
+    [folderSaving, setFolderSaving] = useState(false),
+    [folderError, setFolderError] = useState("");
   const input = useRef<HTMLInputElement>(null),
+    folderInput = useRef<HTMLInputElement>(null),
     versionInput = useRef<HTMLInputElement>(null);
   const load = useCallback(async () => {
     setLoading(true);
@@ -108,30 +115,55 @@ export function FileManager({ lockedProjectId }: { lockedProjectId?: string }) {
     }
     return result;
   }, [data, folderId]);
-  async function createFolder() {
-    if (!projectId) return setError("请先选择项目");
-    const name = window.prompt("新文件夹名称");
-    if (!name) return;
+  const project = data?.projects.find((item) => item.id === projectId);
+  const virtualRoot = !lockedProjectId && !projectId;
+  async function createFolderAt(parentId: string | null, name: string) {
     const response = await fetch("/api/files/folders", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ projectId, parentId: folderId, name }),
+      body: JSON.stringify({ projectId, parentId, name }),
     });
     const body = await response.json();
-    if (!response.ok) return setError(body.error || "创建失败");
-    await load();
+    if (!response.ok) throw new Error(body.error || "创建失败");
+    return body.folder as FolderItem;
   }
-  async function upload(files: FileList | null, targetFileId?: string) {
+  async function submitFolder() {
+    const name = folderName.trim();
+    if (!name) return setFolderError("请输入文件夹名称");
+    if (name.length > 120) return setFolderError("文件夹名称不能超过 120 个字符");
+    setFolderSaving(true);
+    setFolderError("");
+    try {
+      await createFolderAt(folderId, name);
+      setFolderDialog(false);
+      setFolderName("");
+      await load();
+    } catch (cause) {
+      setFolderError(cause instanceof Error ? cause.message : "创建失败");
+    } finally {
+      setFolderSaving(false);
+    }
+  }
+  async function uploadFiles(
+    files: FileList | File[] | null,
+    targetFileId?: string,
+    destinationFolderId: string | null = folderId,
+    progress?: { current: number; total: number },
+  ) {
     if (!files?.length || !projectId) return;
-    for (const file of Array.from(files)) {
-      setUploading(`正在上传 ${file.name}`);
+    const fileList = Array.from(files);
+    for (let fileIndex = 0; fileIndex < fileList.length; fileIndex += 1) {
+      const file = fileList[fileIndex];
+      const current = progress?.current || fileIndex + 1;
+      const total = progress?.total || fileList.length;
+      setUploading(`正在上传 ${current}/${total} · ${file.name}`);
       try {
         const start = await fetch("/api/files/uploads", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             projectId,
-            folderId,
+            folderId: destinationFolderId,
             fileId: targetFileId,
             name: file.name,
             mimeType: file.type || "application/octet-stream",
@@ -158,7 +190,9 @@ export function FileManager({ lockedProjectId }: { lockedProjectId?: string }) {
           if (!signedResponse.ok)
             throw new Error(signed.error || "无法获取上传地址");
           for (const part of signed.parts) {
-            setUploading(`${file.name} · ${part.partNumber}/${partCount}`);
+            setUploading(
+              `${current}/${total} · ${file.name} · 分片 ${part.partNumber}/${partCount}`,
+            );
             const chunk = file.slice(
                 (part.partNumber - 1) * partSize,
                 Math.min(part.partNumber * partSize, file.size),
@@ -183,12 +217,63 @@ export function FileManager({ lockedProjectId }: { lockedProjectId?: string }) {
         if (!finish.ok) throw new Error(result.error || "完成上传失败");
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : "上传失败");
-        break;
+        throw cause;
       }
     }
-    setUploading("");
-    if (input.current) input.current.value = "";
-    await load();
+  }
+  async function upload(files: FileList | null, targetFileId?: string) {
+    try {
+      setError("");
+      await uploadFiles(files, targetFileId);
+      await load();
+    } catch {
+      // uploadFiles 已展示具体错误。
+    } finally {
+      setUploading("");
+      if (input.current) input.current.value = "";
+      if (versionInput.current) versionInput.current.value = "";
+    }
+  }
+  async function uploadFolder(files: FileList | null) {
+    if (!files?.length || !projectId || !data) return;
+    setError("");
+    const folderCache = new Map<string, string>();
+    for (const folder of data.treeFolders.filter(
+      (item) => item.projectId === projectId,
+    )) {
+      folderCache.set(`${folder.parentId || "ROOT"}\u0000${folder.name}`, folder.id);
+    }
+    const selectedFiles = Array.from(files);
+    try {
+      for (let index = 0; index < selectedFiles.length; index += 1) {
+        const file = selectedFiles[index];
+        const relativePath = (file as File & { webkitRelativePath?: string })
+          .webkitRelativePath;
+        const parsed = parseFolderUploadPath(relativePath || file.name);
+        let parentId = folderId;
+        for (const name of parsed.folders) {
+          const key = `${parentId || "ROOT"}\u0000${name}`;
+          let childId = folderCache.get(key);
+          if (!childId) {
+            setUploading(`正在创建文件夹 · ${name}`);
+            const created = await createFolderAt(parentId, name);
+            childId = created.id;
+            folderCache.set(key, childId);
+          }
+          parentId = childId;
+        }
+        await uploadFiles([file], undefined, parentId, {
+          current: index + 1,
+          total: selectedFiles.length,
+        });
+      }
+      await load();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "文件夹上传失败");
+    } finally {
+      setUploading("");
+      if (folderInput.current) folderInput.current.value = "";
+    }
   }
   async function remove(file: FileItem) {
     if (!window.confirm(`将“${file.name}”移入回收站？`)) return;
@@ -212,21 +297,34 @@ export function FileManager({ lockedProjectId }: { lockedProjectId?: string }) {
             多级目录、文件版本与工作项引用统一管理
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap justify-end gap-2">
           <button
-            onClick={() => void createFolder()}
-            className="secondary-button"
+            disabled={virtualRoot || trash}
+            onClick={() => {
+              setFolderName("");
+              setFolderError("");
+              setFolderDialog(true);
+            }}
+            className="secondary-button disabled:cursor-not-allowed disabled:opacity-50"
           >
             <FolderPlus size={17} />
             新建文件夹
           </button>
           <button
-            disabled={!projectId || data?.storage.blocked}
+            disabled={virtualRoot || trash || data?.storage.blocked}
             onClick={() => input.current?.click()}
             className="primary-button disabled:opacity-50"
           >
             <Upload size={17} />
             上传文件
+          </button>
+          <button
+            disabled={virtualRoot || trash || data?.storage.blocked}
+            onClick={() => folderInput.current?.click()}
+            className="secondary-button disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <UploadCloud size={17} />
+            上传文件夹
           </button>
           <input
             ref={input}
@@ -234,6 +332,17 @@ export function FileManager({ lockedProjectId }: { lockedProjectId?: string }) {
             multiple
             className="hidden"
             onChange={(event) => void upload(event.target.files)}
+          />
+          <input
+            ref={folderInput}
+            type="file"
+            multiple
+            className="hidden"
+            {...({
+              webkitdirectory: "",
+              directory: "",
+            } as unknown as React.InputHTMLAttributes<HTMLInputElement>)}
+            onChange={(event) => void uploadFolder(event.target.files)}
           />
           <input
             ref={versionInput}
@@ -282,22 +391,25 @@ export function FileManager({ lockedProjectId }: { lockedProjectId?: string }) {
               className={`mt-3 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm ${!folderId ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-50"}`}
             >
               <Folder size={16} />
-              根目录
+              {virtualRoot ? "全部项目" : "根目录"}
             </button>
-            <FolderTree
-              folders={data.treeFolders.filter(
-                (folder) => !projectId || folder.projectId === projectId,
-              )}
-              parentId={null}
-              active={folderId}
-              choose={setFolderId}
-            />
+            {!virtualRoot && (
+              <FolderTree
+                folders={data.treeFolders.filter(
+                  (folder) => folder.projectId === projectId,
+                )}
+                parentId={null}
+                active={folderId}
+                choose={setFolderId}
+              />
+            )}
             <button
+              disabled={virtualRoot}
               onClick={() => {
                 setTrash(!trash);
                 setFolderId(null);
               }}
-              className={`mt-4 flex w-full items-center gap-2 border-t pt-4 text-sm ${trash ? "text-blue-600" : "text-slate-500"}`}
+              className={`mt-4 flex w-full items-center gap-2 border-t pt-4 text-sm disabled:cursor-not-allowed disabled:opacity-40 ${trash ? "text-blue-600" : "text-slate-500"}`}
             >
               <Trash2 size={16} />
               回收站
@@ -374,7 +486,48 @@ export function FileManager({ lockedProjectId }: { lockedProjectId?: string }) {
                       </tr>
                     </thead>
                     <tbody>
-                      {data.folders.map((folder) => (
+                      {virtualRoot &&
+                        data.projects
+                          .filter((item) =>
+                            item.name.toLowerCase().includes(query.toLowerCase()),
+                          )
+                          .map((item) => (
+                            <tr
+                              key={item.id}
+                              onClick={() => {
+                                setProjectId(item.id);
+                                setFolderId(null);
+                                setTrash(false);
+                              }}
+                              className="cursor-pointer border-b hover:bg-blue-50/50"
+                            >
+                              <td className="px-5 py-3">
+                                <div className="flex items-center gap-3">
+                                  <span className="grid size-9 place-items-center rounded-lg bg-blue-50 text-blue-600">
+                                    <Folder size={18} />
+                                  </span>
+                                  <span>
+                                    <b className="block text-sm">{item.name}</b>
+                                    <span className="text-xs text-slate-400">
+                                      {item.code}
+                                    </span>
+                                  </span>
+                                </div>
+                              </td>
+                              <td className="px-4 text-sm text-slate-500">
+                                {item.name}
+                              </td>
+                              <td className="px-4 text-sm text-slate-400">—</td>
+                              <td className="px-4 text-sm text-slate-400">—</td>
+                              <td className="px-4 text-sm text-slate-400">
+                                项目文件夹
+                              </td>
+                              <td className="px-4 text-right text-slate-400">
+                                <ChevronRight size={17} />
+                              </td>
+                            </tr>
+                          ))}
+                      {!virtualRoot && data.folders.map((folder) => (
                         <tr
                           key={folder.id}
                           onDoubleClick={() => setFolderId(folder.id)}
@@ -401,7 +554,7 @@ export function FileManager({ lockedProjectId }: { lockedProjectId?: string }) {
                           <td />
                         </tr>
                       ))}
-                      {visibleFiles.map((file) => (
+                      {!virtualRoot && visibleFiles.map((file) => (
                         <tr
                           key={file.id}
                           className="border-b last:border-0 hover:bg-slate-50"
@@ -453,7 +606,10 @@ export function FileManager({ lockedProjectId }: { lockedProjectId?: string }) {
                       ))}
                     </tbody>
                   </table>
-                  {!data.folders.length && !visibleFiles.length && (
+                  {((virtualRoot && !data.projects.length) ||
+                    (!virtualRoot &&
+                      !data.folders.length &&
+                      !visibleFiles.length)) && (
                     <div className="p-14 text-center text-sm text-slate-400">
                       当前目录为空
                     </div>
@@ -470,6 +626,21 @@ export function FileManager({ lockedProjectId }: { lockedProjectId?: string }) {
           {uploading}
         </div>
       )}
+      {folderDialog && (
+        <FolderDialog
+          name={folderName}
+          setName={setFolderName}
+          location={[project?.name || "项目", ...crumbs.map((item) => item.name)].join(
+            " / ",
+          )}
+          error={folderError}
+          saving={folderSaving}
+          close={() => {
+            if (!folderSaving) setFolderDialog(false);
+          }}
+          submit={() => void submitFolder()}
+        />
+      )}
       {selected && (
         <FileDrawer
           fileId={selected}
@@ -482,6 +653,106 @@ export function FileManager({ lockedProjectId }: { lockedProjectId?: string }) {
           remove={remove}
         />
       )}
+    </div>
+  );
+}
+
+function FolderDialog({
+  name,
+  setName,
+  location,
+  error,
+  saving,
+  close,
+  submit,
+}: {
+  name: string;
+  setName: (name: string) => void;
+  location: string;
+  error: string;
+  saving: boolean;
+  close: () => void;
+  submit: () => void;
+}) {
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") close();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [close]);
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="new-folder-title"
+      className="fixed inset-0 z-[60] grid place-items-center p-4"
+    >
+      <button
+        aria-label="关闭新建文件夹弹窗"
+        onClick={close}
+        className="absolute inset-0 bg-slate-950/30 backdrop-blur-[1px]"
+      />
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          submit();
+        }}
+        className="relative w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl"
+      >
+        <button
+          type="button"
+          aria-label="关闭"
+          onClick={close}
+          disabled={saving}
+          className="absolute right-5 top-5 text-slate-400 hover:text-slate-600"
+        >
+          <X size={19} />
+        </button>
+        <div className="flex items-center gap-3">
+          <span className="grid size-10 place-items-center rounded-xl bg-blue-50 text-blue-600">
+            <FolderPlus size={19} />
+          </span>
+          <div>
+            <h3 id="new-folder-title" className="font-semibold text-slate-900">
+              新建文件夹
+            </h3>
+            <p className="mt-0.5 max-w-72 truncate text-xs text-slate-400">
+              当前位置：{location}
+            </p>
+          </div>
+        </div>
+        <label className="mt-5 block text-sm font-medium text-slate-700">
+          文件夹名称
+          <input
+            autoFocus
+            value={name}
+            maxLength={120}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="请输入文件夹名称"
+            className="field mt-2"
+          />
+        </label>
+        {error && <p className="mt-2 text-sm text-rose-600">{error}</p>}
+        <div className="mt-6 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={close}
+            disabled={saving}
+            className="secondary-button"
+          >
+            取消
+          </button>
+          <button
+            type="submit"
+            disabled={saving || !name.trim()}
+            className="primary-button disabled:opacity-50"
+          >
+            {saving && <LoaderCircle size={16} className="animate-spin" />}
+            创建
+          </button>
+        </div>
+      </form>
     </div>
   );
 }
