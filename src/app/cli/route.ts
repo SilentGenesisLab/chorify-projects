@@ -139,7 +139,9 @@ echo "Guide: ${baseUrl}/cli/guide"
 }
 
 export async function GET(request: Request) {
-  const origin = new URL(request.url).origin;
+  const host = request.headers.get("x-forwarded-host") || request.headers.get("host");
+  const protocol = request.headers.get("x-forwarded-proto") || new URL(request.url).protocol.replace(":", "");
+  const origin = host ? `${protocol}://${host}` : new URL(request.url).origin;
   return new Response(cliScript(origin), {
     headers: {
       "Content-Type": "text/x-shellscript; charset=utf-8",

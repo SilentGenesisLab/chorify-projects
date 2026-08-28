@@ -1,5 +1,7 @@
 export async function GET(request: Request) {
-  const origin = new URL(request.url).origin;
+  const host = request.headers.get("x-forwarded-host") || request.headers.get("host");
+  const protocol = request.headers.get("x-forwarded-proto") || new URL(request.url).protocol.replace(":", "");
+  const origin = host ? `${protocol}://${host}` : new URL(request.url).origin;
   const guide = `# Chorify CLI 使用说明
 
 Chorify CLI 让真人用户授权的 AI/Codex 通过 API Key 查询和操作项目数据。所有写操作仍归属于 API Key 所属的真人用户，并进入操作日志。
