@@ -2,13 +2,25 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { teamAccess } from "@/lib/team-api";
+import { isTeamManager } from "@/lib/team-permissions";
 
-const include = { owner: { select: { id: true, name: true, avatarColor: true } }, keyResults: { include: { owner: { select: { id: true, name: true } }, alignments: { include: { user: { select: { id: true, name: true } } } }, checkIns: { orderBy: { createdAt: "desc" as const }, take: 10, include: { author: { select: { name: true } } } } } } };
+const include = { owner: { select: { id: true, name: true, avatarColor: true } }, keyResults: { include: { owner: { select: { id: true, name: true, avatarColor: true } }, alignments: { include: { user: { select: { id: true, name: true, avatarColor: true } } } }, checkIns: { orderBy: { createdAt: "desc" as const }, take: 10, include: { author: { select: { name: true } } } } } } };
 export async function GET(request: NextRequest, { params }: { params: Promise<{teamId:string}> }) {
   const {teamId}=await params; const access=await teamAccess(request,teamId); if("error" in access)return access.error;
-  const url=new URL(request.url), now=new Date();
-  const objectives=await prisma.teamObjective.findMany({where:{teamId,...(url.searchParams.get("all")==="1"?{}:{startsAt:{lte:now},endsAt:{gte:now}})},orderBy:{startsAt:"desc"},include});
-  return NextResponse.json({objectives});
+  if(access.membership.role==="GUEST")return NextResponse.json({error:"访客不能查看成员 OKR"},{status:403});
+  const url=new URL(request.url), now=new Date(), memberId=url.searchParams.get("memberId")||"";
+  const members=await prisma.teamMember.findMany({where:{teamId,role:{not:"GUEST"}},include:{user:{select:{id:true,name:true,avatarColor:true}}},orderBy:{user:{name:"asc"}}});
+  if(memberId&&!members.some(x=>x.userId===memberId))return NextResponse.json({error:"成员不属于当前团队"},{status:400});
+  const allObjectives=await prisma.teamObjective.findMany({where:{teamId,...(url.searchParams.get("all")==="1"?{}:{startsAt:{lte:now},endsAt:{gte:now}})},orderBy:{startsAt:"desc"},include});
+  const involved=(objective:typeof allObjectives[number],userId:string)=>objective.ownerId===userId||objective.keyResults.some(kr=>kr.ownerId===userId||kr.alignments.some(x=>x.userId===userId));
+  const objectives=memberId?allObjectives.filter(objective=>involved(objective,memberId)):allObjectives;
+  const memberSummaries=members.map(member=>{
+    const related=allObjectives.filter(objective=>involved(objective,member.userId));
+    const keyResults=allObjectives.flatMap(objective=>objective.keyResults).filter(kr=>kr.ownerId===member.userId||kr.alignments.some(x=>x.userId===member.userId));
+    const avgProgress=keyResults.length?Math.round(keyResults.reduce((sum,kr)=>sum+Math.min(100,kr.targetValue>0?kr.currentValue/kr.targetValue*100:0),0)/keyResults.length):0;
+    return {userId:member.userId,name:member.user.name,avatarColor:member.user.avatarColor,objectiveCount:related.length,keyResultCount:keyResults.length,avgProgress,atRisk:related.filter(x=>x.status==="AT_RISK").length};
+  });
+  return NextResponse.json({objectives,members:memberSummaries,viewerId:access.userId,canManage:isTeamManager(access.membership.role)});
 }
 export async function POST(request: NextRequest,{params}:{params:Promise<{teamId:string}>}){
   const {teamId}=await params; const access=await teamAccess(request,teamId,true); if("error" in access)return access.error;

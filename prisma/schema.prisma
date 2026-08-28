@@ -46,6 +46,11 @@ enum MessagePriority {
   URGENT
 }
 
+enum WeeklyReportStatus {
+  DRAFT
+  SUBMITTED
+}
+
 enum MilestoneStatus {
   PLANNED
   IN_PROGRESS
@@ -137,12 +142,13 @@ model User {
   keyResultCheckIns         TeamKeyResultCheckIn[]
   sentTeamMessages          TeamMessage[]            @relation("TeamMessageSender")
   receivedTeamMessages      TeamMessageRecipient[]
+  weeklyReports             TeamWeeklyReport[]
   createdAt                 DateTime                 @default(now())
   updatedAt                 DateTime                 @updatedAt
 }
 
 model Team {
-  id               String          @id @default(cuid())
+  id               String             @id @default(cuid())
   name             String
   description      String?
   mission          String?
@@ -152,8 +158,9 @@ model Team {
   invites          TeamInvite[]
   objectives       TeamObjective[]
   messages         TeamMessage[]
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
+  weeklyReports    TeamWeeklyReport[]
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
 }
 
 model TeamMember {
@@ -263,6 +270,25 @@ model TeamMessageRecipient {
 
   @@id([messageId, userId])
   @@index([userId, readAt, deliveredAt])
+}
+
+model TeamWeeklyReport {
+  id          String             @id @default(cuid())
+  teamId      String
+  authorId    String
+  weekStart   DateTime
+  weekEnd     DateTime
+  content     String
+  status      WeeklyReportStatus @default(DRAFT)
+  submittedAt DateTime?
+  team        Team               @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  author      User               @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  @@unique([teamId, authorId, weekStart])
+  @@index([teamId, weekStart, status])
+  @@index([authorId, weekStart])
 }
 
 model TeamInvite {
