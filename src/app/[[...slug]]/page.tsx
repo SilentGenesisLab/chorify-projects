@@ -9,6 +9,6 @@ export default async function Page({ params, searchParams }: { params: Promise<{
   const nextPath = requestedNext?.startsWith("/") && !requestedNext.startsWith("//") ? requestedNext : "";
   const route = slug.join("/") || "dashboard";
   const userId = await verifySessionToken((await cookies()).get(SESSION_COOKIE)?.value);
-  const user = userId ? await prisma.user.findUnique({ where: { id: userId }, select: { name: true, systemRole: true } }) : null;
-  return <ChorifyApp route={route} nextPath={nextPath} user={user ? { name: user.name, role: user.systemRole === "ADMIN" ? "系统管理员" : "项目成员" } : undefined} />;
+  const user = userId ? await prisma.user.findUnique({ where: { id: userId }, select: { name: true, avatarUrl: true, systemRole: true } }) : null;
+  return <ChorifyApp route={route} nextPath={nextPath} user={user ? { name: user.name, avatarUrl: user.avatarUrl, role: user.systemRole === "ADMIN" ? "系统管理员" : "项目成员" } : undefined} />;
 }

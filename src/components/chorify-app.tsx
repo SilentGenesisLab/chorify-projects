@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { AuthPage } from "@/components/auth-page";
 import { InvitePage } from "@/components/invite-page";
 import { ProjectsPage } from "@/components/projects-page";
@@ -34,6 +34,11 @@ import {
   Moon,
   Sun,
   HelpCircle,
+  Settings,
+  Camera,
+  ShieldCheck,
+  Smartphone,
+  LoaderCircle,
   ExternalLink,
   ChevronUp,
   Upload,
@@ -92,16 +97,18 @@ function Status({ children }: { children: string }) {
 function Avatar({
   name,
   color = "bg-blue-600",
+  src,
 }: {
   name: string;
   color?: string;
+  src?: string | null;
 }) {
   const initial = Array.from(name.trim())[0]?.toLocaleUpperCase() || "用";
   return (
     <span
       className={`inline-grid size-8 shrink-0 place-items-center rounded-full ${color} text-xs font-semibold text-white ring-2 ring-white`}
     >
-      {initial}
+      {src ? <Image src={src} alt="" width={32} height={32} unoptimized className="size-full rounded-full object-cover" /> : initial}
     </span>
   );
 }
@@ -115,11 +122,12 @@ function Sidebar({
   route: string;
   open: boolean;
   onClose: () => void;
-  user?: { name: string; role: string };
+  user?: { name: string; role: string; avatarUrl?: string | null };
 }) {
   const router = useRouter();
   const [accountOpen, setAccountOpen] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   function setTheme(theme: "light" | "dark") {
     document.documentElement.dataset.theme = theme;
     window.localStorage.setItem("chorify-theme", theme);
@@ -219,13 +227,14 @@ function Sidebar({
             <div className="absolute bottom-[76px] left-3 right-3 z-50 overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 shadow-[0_18px_55px_rgba(15,23,42,.18)]">
               <div className="mb-1 border-b border-slate-100 px-3 py-2"><p className="truncate text-sm font-semibold">{user?.name || "当前用户"}</p><p className="mt-0.5 text-xs text-slate-400">{user?.role || "项目成员"}</p></div>
               <div className="px-2 py-2"><p className="mb-2 text-[11px] font-medium text-slate-400">显示模式</p><div className="grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1"><button onClick={()=>setTheme("light")} className="flex h-8 items-center justify-center gap-1.5 rounded-lg bg-white text-xs font-medium text-slate-700 shadow-sm"><Sun size={14}/>浅色</button><button onClick={()=>setTheme("dark")} className="flex h-8 items-center justify-center gap-1.5 rounded-lg text-xs font-medium text-slate-600"><Moon size={14}/>深色</button></div></div>
+              <button onClick={()=>{setAccountOpen(false);setSettingsOpen(true)}} className="flex h-10 w-full items-center gap-3 rounded-xl px-3 text-sm text-slate-600 hover:bg-slate-50"><Settings size={17}/>个人设置</button>
               <button onClick={()=>{setAccountOpen(false);setFeedbackOpen(true)}} className="flex h-10 w-full items-center gap-3 rounded-xl px-3 text-sm text-slate-600 hover:bg-slate-50"><HelpCircle size={17}/>帮助与反馈</button>
               <a href="https://official.sligenai.cn/" target="_blank" rel="noopener noreferrer" onClick={()=>setAccountOpen(false)} className="flex h-10 items-center gap-3 rounded-xl px-3 text-sm text-slate-600 hover:bg-slate-50"><ExternalLink size={17}/>洞墟官网<ExternalLink className="ml-auto text-slate-300" size={13}/></a>
               <button onClick={()=>void logout()} className="flex h-10 w-full items-center gap-3 rounded-xl px-3 text-sm text-rose-600 hover:bg-rose-50"><LogOut size={17}/>退出登录</button>
             </div>
           </>}
           <button onClick={()=>setAccountOpen((value)=>!value)} className="flex w-full items-center gap-3 rounded-xl p-1 text-left hover:bg-slate-50">
-            <Avatar name={user?.name || "用户"} />
+            <Avatar name={user?.name || "用户"} src={user?.avatarUrl} />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold">
                 {user?.name || "当前用户"}
@@ -238,10 +247,32 @@ function Sidebar({
           </button>
         </div>
       </aside>
-      {feedbackOpen && <FeedbackModal close={()=>setFeedbackOpen(false)}/>} 
+      {feedbackOpen && <FeedbackModal close={()=>setFeedbackOpen(false)}/>}
+      {settingsOpen && <PersonalSettingsModal close={()=>setSettingsOpen(false)}/>}
     </>
   );
 }
+
+type AccountProfile = { name:string; phone:string; maskedPhone:string; avatarColor:string; avatarUrl:string|null };
+
+function PersonalSettingsModal({close}:{close:()=>void}) {
+  const router=useRouter();
+  const [tab,setTab]=useState<"profile"|"security">("profile"),[profile,setProfile]=useState<AccountProfile|null>(null);
+  const [name,setName]=useState(""),[avatarUrl,setAvatarUrl]=useState<string|null>(null),[error,setError]=useState(""),[notice,setNotice]=useState(""),[busy,setBusy]=useState(false);
+  const [passwordCode,setPasswordCode]=useState(""),[password,setPassword]=useState(""),[confirmPassword,setConfirmPassword]=useState("");
+  const [newPhone,setNewPhone]=useState(""),[phoneCode,setPhoneCode]=useState(""),[countdown,setCountdown]=useState(0);
+  useEffect(()=>{fetch("/api/me").then(async response=>{const data=await response.json();if(!response.ok)throw new Error(data.error||"加载失败");setProfile(data.user);setName(data.user.name);setAvatarUrl(data.user.avatarUrl)}).catch(cause=>setError(cause instanceof Error?cause.message:"加载失败"))},[]);
+  useEffect(()=>{if(!countdown)return;const timer=window.setInterval(()=>setCountdown(value=>Math.max(0,value-1)),1000);return()=>window.clearInterval(timer)},[countdown]);
+  async function request(url:string,body:unknown){setError("");setNotice("");setBusy(true);try{const response=await fetch(url,{method:url==="/api/me"?"PATCH":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});const data=await response.json();if(!response.ok)throw new Error(data.error||"操作失败");return data}catch(cause){setError(cause instanceof Error?cause.message:"操作失败");throw cause}finally{setBusy(false)}}
+  async function sendCode(phone:string){if(!/^1\d{10}$/.test(phone)){setError("请输入正确的手机号");return}try{await request("/api/auth/sms/send",{phone});setCountdown(60);setNotice("验证码已发送，请在 5 分钟内使用")}catch{}}
+  async function saveProfile(event:FormEvent){event.preventDefault();try{const data=await request("/api/me",{name,avatarUrl});setProfile(data.user);setNotice("个人资料已保存");router.refresh()}catch{}}
+  async function changePassword(event:FormEvent){event.preventDefault();if(password!==confirmPassword)return setError("两次输入的密码不一致");try{await request("/api/me/password",{code:passwordCode,password});setPasswordCode("");setPassword("");setConfirmPassword("");setNotice("密码修改成功")}catch{}}
+  async function changePhone(event:FormEvent){event.preventDefault();try{const data=await request("/api/me/phone",{phone:newPhone,code:phoneCode});setProfile(value=>value?{...value,phone:newPhone,maskedPhone:data.maskedPhone}:value);setNewPhone("");setPhoneCode("");setNotice("手机号换绑成功")}catch{}}
+  function pickAvatar(file?:File){if(!file)return;if(!["image/png","image/jpeg","image/webp"].includes(file.type))return setError("仅支持 PNG、JPEG 或 WebP 图片");if(file.size>512*1024)return setError("头像不能超过 512KB");const reader=new FileReader();reader.onload=()=>{setAvatarUrl(String(reader.result));setError("")};reader.readAsDataURL(file)}
+  return <div className="fixed inset-0 z-[90] grid place-items-center overflow-y-auto bg-slate-950/40 p-4 backdrop-blur-sm"><button aria-label="关闭个人设置" onClick={close} className="absolute inset-0"/><section role="dialog" aria-modal="true" aria-labelledby="personal-settings-title" className="relative my-4 max-h-[92vh] w-full max-w-[820px] overflow-y-auto rounded-3xl border border-white/70 bg-white shadow-2xl"><header className="flex items-center px-6 pb-4 pt-6 sm:px-8"><h2 id="personal-settings-title" className="text-xl font-bold">个人设置</h2><button onClick={close} aria-label="关闭" className="ml-auto rounded-xl p-2 text-slate-400 hover:bg-slate-100"><X size={22}/></button></header><div className="mx-6 flex gap-1 overflow-x-auto rounded-2xl border border-slate-200 bg-slate-50 p-1.5 sm:mx-8"><button onClick={()=>{setTab("profile");setError("");setNotice("")}} className={`flex h-10 min-w-28 items-center justify-center gap-2 rounded-xl px-4 text-sm ${tab==="profile"?"bg-white font-semibold text-slate-900 shadow-sm":"text-slate-500"}`}><Settings size={16}/>资料</button><button onClick={()=>{setTab("security");setError("");setNotice("")}} className={`flex h-10 min-w-28 items-center justify-center gap-2 rounded-xl px-4 text-sm ${tab==="security"?"bg-white font-semibold text-slate-900 shadow-sm":"text-slate-500"}`}><ShieldCheck size={16}/>安全设置</button></div>{!profile?<div className="grid min-h-72 place-items-center"><LoaderCircle className="animate-spin text-blue-600"/></div>:<div className="p-6 sm:p-8">{notice&&<div role="status" className="mb-5 rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{notice}</div>}{error&&<div role="alert" className="mb-5 rounded-xl bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}{tab==="profile"?<form onSubmit={saveProfile} className="space-y-6"><div className="flex flex-col gap-4 sm:flex-row sm:items-center"><span className="grid size-20 shrink-0 place-items-center overflow-hidden rounded-full bg-blue-600 text-2xl font-semibold text-white ring-4 ring-blue-50">{avatarUrl?<Image src={avatarUrl} alt="头像预览" width={80} height={80} unoptimized className="size-full object-cover"/>:Array.from(name)[0]||"用"}</span><div><label className="secondary-button cursor-pointer"><Camera size={16}/>上传头像<input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={event=>pickAvatar(event.target.files?.[0])}/></label>{avatarUrl&&<button type="button" onClick={()=>setAvatarUrl(null)} className="ml-2 text-sm text-slate-500 hover:text-rose-600">移除</button>}<p className="mt-2 text-xs text-slate-400">PNG、JPEG 或 WebP，不超过 512KB</p></div></div><label className="block"><span className="mb-2 block text-sm font-medium">账户名</span><input className="field" value={name} onChange={event=>setName(event.target.value)} minLength={2} maxLength={40} required/></label><div><p className="text-sm font-medium">当前手机号</p><p className="mt-2 text-sm text-slate-500">{profile.maskedPhone}</p></div><button disabled={busy} className="primary-button disabled:opacity-60">{busy?"保存中…":"保存资料"}</button></form>:<div className="space-y-8"><form onSubmit={changePassword} className="space-y-4"><div><h3 className="font-semibold">修改密码</h3><p className="mt-1 text-sm text-slate-500">验证码将发送到当前账户手机 {profile.maskedPhone}</p></div><CodeField code={passwordCode} setCode={setPasswordCode} onSend={()=>void sendCode(profile.phone)} countdown={countdown}/><label className="block"><span className="mb-2 block text-sm font-medium">新密码</span><input type="password" autoComplete="new-password" className="field" value={password} onChange={event=>setPassword(event.target.value)} placeholder="至少 8 位，需包含字母和数字" required/></label><label className="block"><span className="mb-2 block text-sm font-medium">确认新密码</span><input type="password" autoComplete="new-password" className="field" value={confirmPassword} onChange={event=>setConfirmPassword(event.target.value)} required/></label><button disabled={busy} className="primary-button disabled:opacity-60">修改密码</button></form><div className="border-t border-slate-100"/><form onSubmit={changePhone} className="space-y-4"><div><h3 className="flex items-center gap-2 font-semibold"><Smartphone size={18}/>换绑手机号</h3><p className="mt-1 text-sm text-slate-500">新手机号验证成功后立即生效</p></div><label className="block"><span className="mb-2 block text-sm font-medium">新手机号</span><input inputMode="tel" className="field" value={newPhone} onChange={event=>setNewPhone(event.target.value.replace(/\D/g,"").slice(0,11))} placeholder="请输入 11 位手机号" required/></label><CodeField code={phoneCode} setCode={setPhoneCode} onSend={()=>void sendCode(newPhone)} countdown={countdown}/><button disabled={busy} className="primary-button disabled:opacity-60">确认换绑</button></form></div>}</div>}</section></div>
+}
+
+function CodeField({code,setCode,onSend,countdown}:{code:string;setCode:(value:string)=>void;onSend:()=>void;countdown:number}) { return <label className="block"><span className="mb-2 block text-sm font-medium">验证码</span><span className="flex gap-2"><input inputMode="numeric" className="field" value={code} onChange={event=>setCode(event.target.value.replace(/\D/g,"").slice(0,6))} placeholder="6 位数字" required/><button type="button" onClick={onSend} disabled={countdown>0} className="secondary-button min-w-28 disabled:opacity-50">{countdown?`${countdown}s 后重试`:"获取验证码"}</button></span></label> }
 
 function FeedbackModal({ close }: { close: () => void }) {
   const [type,setType]=useState("PRODUCT"), [content,setContent]=useState(""), [files,setFiles]=useState<File[]>([]);
@@ -323,59 +354,69 @@ const tasks = [
 ];
 
 function Dashboard() {
+  const router = useRouter();
+  const [data, setData] = useState<DashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const response = await fetch("/api/dashboard", { cache: "no-store" });
+      const body = await response.json();
+      if (response.status === 401) {
+        router.replace("/login?next=%2F");
+        return;
+      }
+      if (!response.ok) throw new Error(body.error || "仪表盘加载失败");
+      setData(body);
+      setError("");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "仪表盘加载失败");
+    } finally {
+      setLoading(false);
+    }
+  }, [router]);
+  useEffect(() => { void Promise.resolve().then(load); }, [load]);
+
+  if (loading)
+    return <div className="grid min-h-[520px] place-items-center text-slate-400"><div className="text-center"><Activity className="mx-auto mb-3 animate-pulse text-blue-500"/><p className="text-sm">正在汇总当前工作情况…</p></div></div>;
+  if (error || !data)
+    return <div className="card grid min-h-80 place-items-center p-8 text-center"><div><AlertTriangle className="mx-auto mb-3 text-rose-500"/><h2 className="font-semibold">仪表盘暂时无法加载</h2><p className="mt-1 text-sm text-slate-500">{error || "请稍后重试"}</p><button onClick={() => void load()} className="primary-button mx-auto mt-4">重新加载</button></div></div>;
+
+  const generatedAt = new Date(data.generatedAt);
+  const hour = Number(new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", hour: "2-digit", hour12: false }).format(generatedAt));
+  const greeting = hour < 6 ? "夜深了" : hour < 12 ? "上午好" : hour < 18 ? "下午好" : "晚上好";
+  const dateText = new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", year: "numeric", month: "long", day: "numeric", weekday: "long" }).format(generatedAt).replace("星期", " · 星期");
+  const summaryCards = [
+    { l: "进行中的项目", v: data.summary.activeProjects, s: `本月新增 ${data.summary.newProjectsThisMonth} 个`, i: Layers3, c: "text-blue-600 bg-blue-50" },
+    { l: "我的待办", v: data.summary.myOpenTasks, s: `${data.summary.dueToday} 项今天到期`, i: ListChecks, c: "text-violet-600 bg-violet-50" },
+    { l: "待验收", v: data.summary.pendingAcceptance, s: "等待我处理的验收", i: ClipboardCheck, c: "text-amber-600 bg-amber-50" },
+    { l: "延期风险", v: data.summary.overdueTasks, s: data.summary.overdueTasks ? "需要尽快处理" : "当前没有逾期任务", i: AlertTriangle, c: "text-rose-600 bg-rose-50" },
+  ];
   return (
     <div className="space-y-6">
       <section className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
-          <p className="mb-1 text-sm text-slate-500">2026年8月27日 · 星期四</p>
+          <p className="mb-1 text-sm text-slate-500">{dateText}</p>
           <h2 className="text-2xl font-bold tracking-tight text-[#17223b]">
-            下午好，陈默
+            {greeting}，{data.user.name}
           </h2>
           <p className="mt-1 text-sm text-slate-500">
-            3 个项目正在推进，今天有 4 项工作需要关注。
+            {data.summary.activeProjects} 个项目正在推进，当前有 {data.summary.attentionCount} 项工作需要关注。
           </p>
         </div>
-        <button className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-[#376ce7] px-4 text-sm font-semibold text-white shadow-sm shadow-blue-200">
+        <Link href="/projects" className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-[#376ce7] px-4 text-sm font-semibold text-white shadow-sm shadow-blue-200">
           <Plus size={17} />
           新建项目
-        </button>
+        </Link>
       </section>
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {[
-          {
-            l: "进行中的项目",
-            v: "3",
-            s: "本月新增 1 个",
-            i: Layers3,
-            c: "text-blue-600 bg-blue-50",
-          },
-          {
-            l: "我的待办",
-            v: "12",
-            s: "4 项今天到期",
-            i: ListChecks,
-            c: "text-violet-600 bg-violet-50",
-          },
-          {
-            l: "待验收",
-            v: "5",
-            s: "较昨日增加 2 项",
-            i: ClipboardCheck,
-            c: "text-amber-600 bg-amber-50",
-          },
-          {
-            l: "延期风险",
-            v: "2",
-            s: "需要尽快处理",
-            i: AlertTriangle,
-            c: "text-rose-600 bg-rose-50",
-          },
-        ].map((x) => (
+        {summaryCards.map((x) => (
           <div className="card p-5" key={x.l}>
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-sm text-slate-500">{x.l}</p>
-                <p className="mt-2 text-3xl font-bold tracking-tight">{x.v}</p>
+            <p className="mt-2 text-3xl font-bold tracking-tight">{x.v}</p>
               </div>
               <div
                 className={`grid size-10 place-items-center rounded-xl ${x.c}`}
@@ -401,7 +442,7 @@ function Dashboard() {
               查看全部
             </Link>
           </div>
-          <TaskTable compact />
+          <DashboardTaskTable tasks={data.tasks} generatedAt={generatedAt} />
         </div>
         <div className="card p-5">
           <div className="flex items-center justify-between">
@@ -409,79 +450,104 @@ function Dashboard() {
               <h3 className="font-semibold">项目状态</h3>
               <p className="mt-0.5 text-xs text-slate-400">当前活跃项目</p>
             </div>
-            <MoreHorizontal size={18} className="text-slate-400" />
+            <Link href="/projects" aria-label="查看全部项目" className="rounded-lg p-1 text-slate-400 hover:bg-slate-50 hover:text-blue-600"><MoreHorizontal size={18} /></Link>
           </div>
-          <div className="mt-5 space-y-5">
-            {[
-              { n: "Chorify Projects", p: 68, s: "正常", c: "bg-blue-500" },
-              { n: "官网重构", p: 42, s: "有风险", c: "bg-amber-500" },
-              { n: "数据工作台", p: 86, s: "正常", c: "bg-emerald-500" },
-            ].map((x) => (
-              <div key={x.n}>
+          {data.projects.length ? <div className="mt-5 space-y-5">
+            {data.projects.map((project) => (
+              <Link href={`/projects/${project.id}/overview`} className="block" key={project.id}>
                 <div className="mb-2 flex items-center">
-                  <span className="text-sm font-medium">{x.n}</span>
-                  <span className="ml-auto text-xs text-slate-400">{x.p}%</span>
+                  <span className="truncate text-sm font-medium">{project.name}</span>
+                  <span className="ml-auto text-xs text-slate-400">{project.progress}%</span>
                   <span className="ml-2">
-                    <Status>{x.s}</Status>
+                    <Status>{project.health === "RISK" ? "有风险" : "正常"}</Status>
                   </span>
                 </div>
                 <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
                   <div
-                    className={`h-full rounded-full ${x.c}`}
-                    style={{ width: `${x.p}%` }}
+                    className={`h-full rounded-full ${project.health === "RISK" ? "bg-amber-500" : "bg-blue-500"}`}
+                    style={{ width: `${project.progress}%` }}
                   />
                 </div>
-              </div>
+              </Link>
             ))}
-          </div>
+          </div> : <DashboardEmpty icon={Layers3} text="暂无正在推进的项目" />}
         </div>
       </section>
       <section className="grid gap-5 lg:grid-cols-2">
         <div className="card p-5">
           <h3 className="font-semibold">版本进度</h3>
-          <div className="mt-4 flex items-center gap-4 rounded-xl bg-[#f7f9fc] p-4">
+          {data.currentVersion ? <Link href={`/projects/${data.currentVersion.project.id}/versions`} className="mt-4 flex items-center gap-4 rounded-xl bg-[#f7f9fc] p-4 hover:bg-slate-100/80">
             <div className="grid size-11 place-items-center rounded-xl bg-blue-50 text-blue-600">
               <Rocket size={21} />
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex justify-between">
-                <p className="font-medium">V0.9 协作内测版</p>
-                <span className="text-sm font-semibold text-blue-600">72%</span>
+                <p className="truncate font-medium">{data.currentVersion.name} · {data.currentVersion.project.name}</p>
+                <span className="text-sm font-semibold text-blue-600">{data.currentVersion.progress}%</span>
               </div>
               <p className="mt-1 text-xs text-slate-400">
-                18 / 25 项已完成 · 计划 9月5日发布
+                {data.currentVersion.completedScope} / {data.currentVersion.totalScope} 项已完成 · {data.currentVersion.plannedAt ? `计划 ${shortDate(data.currentVersion.plannedAt)} 发布` : "暂未设置发布日期"}
               </p>
               <div className="mt-3 h-1.5 rounded-full bg-slate-200">
-                <div className="h-full w-[72%] rounded-full bg-blue-500" />
+                <div className="h-full rounded-full bg-blue-500" style={{ width: `${data.currentVersion.progress}%` }} />
               </div>
             </div>
-          </div>
+          </Link> : <DashboardEmpty icon={Rocket} text="暂无正在推进的版本" />}
         </div>
         <div className="card p-5">
           <h3 className="font-semibold">最近动态</h3>
-          <div className="mt-4 space-y-4">
-            {[
-              "林舟提交了任务 CP-138 等待验收",
-              "苏禾将 Bug CP-27 关联至 V0.9",
-              "陈默更新了项目成员权限",
-            ].map((x, i) => (
-              <div key={x} className="flex gap-3">
+          {data.activities.length ? <div className="mt-4 space-y-4">
+            {data.activities.map((activity, index) => (
+              <div key={activity.id} className="flex gap-3">
                 <div
-                  className={`mt-1 size-2 rounded-full ${i === 0 ? "bg-blue-500" : i === 1 ? "bg-rose-400" : "bg-emerald-500"}`}
+                  className={`mt-1 size-2 rounded-full ${index % 3 === 0 ? "bg-blue-500" : index % 3 === 1 ? "bg-rose-400" : "bg-emerald-500"}`}
                 />
-                <div>
-                  <p className="text-sm text-slate-600">{x}</p>
+                <div className="min-w-0">
+                  <p className="truncate text-sm text-slate-600">{activity.actor?.name || "系统"} {activity.actionLabel} · {activity.project.name}</p>
                   <p className="mt-0.5 text-xs text-slate-400">
-                    {i + 1} 小时前
+                    {relativeTime(activity.createdAt, generatedAt)}
                   </p>
                 </div>
               </div>
             ))}
-          </div>
+          </div> : <DashboardEmpty icon={Activity} text="暂无项目动态" />}
         </div>
       </section>
     </div>
   );
+}
+
+type DashboardTask = {
+  id: string; code: string; title: string; priority: string; status: string; dueAt: string | null; overdue: boolean;
+  project: { id: string; code: string; name: string };
+  assignee: { id: string; name: string; avatarColor: string } | null;
+};
+type DashboardData = {
+  user: { id: string; name: string }; generatedAt: string;
+  summary: { activeProjects: number; newProjectsThisMonth: number; myOpenTasks: number; dueToday: number; pendingAcceptance: number; overdueTasks: number; attentionCount: number };
+  tasks: DashboardTask[];
+  projects: Array<{ id: string; code: string; name: string; progress: number; health: "NORMAL" | "RISK" }>;
+  currentVersion: null | { id: string; name: string; plannedAt: string | null; progress: number; completedScope: number; totalScope: number; project: { id: string; name: string } };
+  activities: Array<{ id: string; actor: { id: string; name: string } | null; actionLabel: string; project: { id: string; name: string }; createdAt: string }>;
+};
+const dashboardStatus: Record<string, string> = { TODO: "待处理", IN_PROGRESS: "进行中", PENDING_ACCEPTANCE: "待验收", NEEDS_CHANGES: "需修改", ACCEPTED: "已完成", DONE: "已完成" };
+const dashboardPriority: Record<string, string> = { LOW: "低", MEDIUM: "中", HIGH: "高", URGENT: "紧急" };
+const shortDate = (value: string) => new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", month: "numeric", day: "numeric" }).format(new Date(value));
+const shanghaiDate = (value: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).format(value);
+function relativeTime(value: string, now: Date) {
+  const seconds = Math.max(0, Math.floor((now.getTime() - new Date(value).getTime()) / 1000));
+  if (seconds < 60) return "刚刚";
+  if (seconds < 3600) return `${Math.floor(seconds / 60)} 分钟前`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)} 小时前`;
+  if (seconds < 604800) return `${Math.floor(seconds / 86400)} 天前`;
+  return shortDate(value);
+}
+function DashboardEmpty({ icon: Icon, text }: { icon: typeof Activity; text: string }) {
+  return <div className="grid min-h-32 place-items-center text-center text-sm text-slate-400"><div><Icon className="mx-auto mb-2" size={22}/><p>{text}</p></div></div>;
+}
+function DashboardTaskTable({ tasks, generatedAt }: { tasks: DashboardTask[]; generatedAt: Date }) {
+  if (!tasks.length) return <DashboardEmpty icon={CheckCircle2} text="当前没有待处理任务" />;
+  return <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-left"><thead><tr className="border-b border-[#edf1f5] bg-[#fafbfd] text-[11px] uppercase tracking-wide text-slate-400"><th className="px-5 py-3 font-medium">任务</th><th className="px-4 py-3 font-medium">负责人</th><th className="px-4 py-3 font-medium">优先级</th><th className="px-4 py-3 font-medium">状态</th><th className="px-5 py-3 font-medium">截止</th></tr></thead><tbody>{tasks.map((task) => <tr key={task.id} className="border-b border-[#f0f3f7] last:border-0 hover:bg-slate-50/70"><td className="px-5 py-3.5"><Link href={`/projects/${task.project.id}/tasks`}><p className="text-sm font-medium">{task.title}</p><p className="mt-0.5 text-xs text-slate-400">{task.code} · {task.project.name}</p></Link></td><td className="px-4 py-3.5"><div className="flex items-center gap-2"><Avatar name={task.assignee?.name || "未分配"}/><span className="text-sm text-slate-600">{task.assignee?.name || "未分配"}</span></div></td><td className="px-4 py-3.5"><Status>{dashboardPriority[task.priority] || task.priority}</Status></td><td className="px-4 py-3.5"><Status>{dashboardStatus[task.status] || task.status}</Status></td><td className={`px-5 py-3.5 text-sm ${task.overdue ? "font-medium text-rose-600" : "text-slate-500"}`}>{task.dueAt ? `${task.overdue ? "已逾期 · " : shanghaiDate(new Date(task.dueAt)) === shanghaiDate(generatedAt) ? "今天 · " : ""}${shortDate(task.dueAt)}` : "未设置"}</td></tr>)}</tbody></table></div>;
 }
 
 function TaskTable({ compact = false }: { compact?: boolean }) {
@@ -736,7 +802,7 @@ export function ChorifyApp({
   nextPath = "",
 }: {
   route: string;
-  user?: { name: string; role: string };
+  user?: { name: string; role: string; avatarUrl?: string | null };
   nextPath?: string;
 }) {
   const [open, setOpen] = useState(false);

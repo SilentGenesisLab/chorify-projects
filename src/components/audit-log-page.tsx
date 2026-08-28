@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Activity, Bot, Download, Eye, KeyRound, LoaderCircle, Search, UserRound, X } from "lucide-react";
 import { SelectField } from "@/components/ui/select-field";
+import { AUDIT_ACTION_LABELS as actions, AUDIT_RESOURCE_LABELS as resources } from "@/lib/audit-display";
 
 type Project = { id: string; code: string; name: string };
 type Log = {
@@ -11,14 +12,6 @@ type Log = {
   project: Project | null; result: string; metadata: Record<string, unknown>; createdAt: string;
 };
 
-const actions: Record<string, string> = {
-  REGISTER: "注册账户", CREATE_TEAM: "创建团队", CREATE_PROJECT: "创建项目", CREATE_TEAM_INVITE: "创建邀请链接",
-  ACCEPT_TEAM_INVITE: "加入团队", REVOKE_TEAM_INVITE: "撤销邀请", RESET_TEAM_INVITE: "重置邀请",
-  UPDATE_TEAM_ROLE: "修改成员角色", REMOVE_TEAM_MEMBER: "移除团队成员", CREATE_API_TOKEN: "创建 API Key",
-  UPDATE_API_TOKEN: "修改 API Key", REVOKE_API_TOKEN: "撤销 API Key", READ_WORK_CONTEXT: "读取工作上下文",
-  READ_TASK_CONTEXT: "读取任务上下文", SUBMIT_REPORT: "提交工作汇报", SUBMIT_FEEDBACK: "提交反馈",
-};
-const resources: Record<string, string> = { USER: "用户", TEAM: "团队", TEAM_INVITE: "团队邀请", TEAM_MEMBER: "团队成员", PROJECT: "项目", API_TOKEN: "API Key", TASK: "任务", FEEDBACK: "反馈" };
 const dateTime = (value: string) => new Intl.DateTimeFormat("zh-CN", { dateStyle: "short", timeStyle: "medium" }).format(new Date(value));
 const csvCell = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""')}"`;
 

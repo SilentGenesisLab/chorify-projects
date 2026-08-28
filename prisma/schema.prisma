@@ -108,6 +108,7 @@ model User {
   phone                     String                   @unique
   passwordHash              String
   avatarColor               String                   @default("#376ce7")
+  avatarUrl                 String?
   systemRole                SystemRole               @default(MEMBER)
   projectMembers            ProjectMember[]
   teamMembers               TeamMember[]
