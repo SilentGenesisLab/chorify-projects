@@ -3,25 +3,39 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { CheckCircle2, Edit3, FileText, LoaderCircle, Send, Users, X } from "lucide-react";
+import { CheckCircle2, Edit3, Eye, FileText, LoaderCircle, Send, UserRound, Users, X } from "lucide-react";
 import { SelectField } from "@/components/ui/select-field";
 import { WEEKLY_REPORT_TEMPLATE, weekRange } from "@/lib/weekly-report";
 
 type Team = { id: string; currentRole: string; permissions: { canManage: boolean } };
-type Report = { id: string; authorId: string; weekStart: string; weekEnd: string; content: string; status: "DRAFT" | "SUBMITTED"; submittedAt: string | null; updatedAt: string; author: { id: string; name: string; avatarColor: string } };
-type Data = { week: { start: string; end: string; startLabel: string }; viewerId: string; canManage: boolean; members: Array<{ id: string; name: string; avatarColor: string }>; reports: Report[]; myReport: Report | null; summary: { submitted: number; expected: number; missing: number } };
+type Report = {
+  id: string; authorId: string; weekStart: string; weekEnd: string; content: string;
+  status: "DRAFT" | "SUBMITTED"; submittedAt: string | null; updatedAt: string;
+  author: { id: string; name: string; avatarColor: string };
+};
+type Data = {
+  week: { start: string; end: string; startLabel: string }; viewerId: string; canManage: boolean;
+  members: Array<{ id: string; name: string; avatarColor: string }>;
+  reports: Report[]; myReport: Report | null;
+  summary: { submitted: number; expected: number; missing: number };
+};
 
-async function request<T>(url: string, init?: RequestInit): Promise<T> { const response = await fetch(url, { ...init, headers: { "Content-Type": "application/json", ...(init?.headers || {}) } }); const body = await response.json(); if (!response.ok) throw new Error(body.error || "操作失败"); return body; }
-const dateText = (value: string) => new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", month: "numeric", day: "numeric" }).format(new Date(value));
+async function request<T>(url: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(url, { ...init, headers: { "Content-Type": "application/json", ...(init?.headers || {}) } });
+  const body = await response.json();
+  if (!response.ok) throw new Error(body.error || "操作失败");
+  return body;
+}
+
+const dateText = (value: string) => new Intl.DateTimeFormat("zh-CN", {
+  timeZone: "Asia/Shanghai", month: "numeric", day: "numeric",
+}).format(new Date(value));
 
 const currentWeek = weekRange()!;
 const weekOptions = Array.from({ length: 12 }, (_, index) => {
   const start = new Date(currentWeek.start.getTime() - index * 7 * 86_400_000);
   const label = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Shanghai",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
+    timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit",
   }).format(start);
   const range = weekRange(label)!;
   return {
@@ -31,17 +45,167 @@ const weekOptions = Array.from({ length: 12 }, (_, index) => {
 });
 
 export function WeeklyReportsPanel({ team }: { team: Team }) {
-  const [weekStart, setWeekStart] = useState(currentWeek.startLabel), [memberId, setMemberId] = useState(""), [data, setData] = useState<Data | null>(null), [loading, setLoading] = useState(true), [error, setError] = useState(""), [editor, setEditor] = useState(false), [selected, setSelected] = useState<Report | null>(null);
-  const load = useCallback(() => request<Data>(`/api/teams/${team.id}/weekly-reports?weekStart=${weekStart}${memberId ? `&memberId=${memberId}` : ""}`).then((result) => { setData(result); setError(""); }).catch((cause: unknown) => { setError(cause instanceof Error ? cause.message : "加载周报失败"); }).finally(() => setLoading(false)), [memberId, team.id, weekStart]);
+  const [weekStart, setWeekStart] = useState(currentWeek.startLabel);
+  const [memberId, setMemberId] = useState("me");
+  const [viewingTeam, setViewingTeam] = useState(false);
+  const [data, setData] = useState<Data | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [editor, setEditor] = useState(false);
+  const [selected, setSelected] = useState<Report | null>(null);
+
+  const load = useCallback(() => request<Data>(
+    `/api/teams/${team.id}/weekly-reports?weekStart=${weekStart}&memberId=${memberId}`,
+  ).then((result) => {
+    setData(result);
+    setError("");
+  }).catch((cause: unknown) => {
+    setError(cause instanceof Error ? cause.message : "加载周报失败");
+  }).finally(() => setLoading(false)), [memberId, team.id, weekStart]);
+
   useEffect(() => { void load(); }, [load]);
-  if (team.currentRole === "GUEST") return <div className="card p-12 text-center text-sm text-slate-400">访客不能查看或提交团队周报</div>;
-  return <div className="space-y-5"><div className="flex flex-col gap-3 lg:flex-row lg:items-end"><div><h3 className="font-semibold">团队周报</h3><p className="mt-1 text-sm text-slate-500">成员以 Markdown 汇报本周完成、下周计划和协作风险</p></div><div className="flex flex-wrap gap-2 lg:ml-auto"><div className="min-w-44"><SelectField value={weekStart} onChange={setWeekStart} options={weekOptions} /></div>{data?.canManage && <div className="min-w-40"><SelectField value={memberId} onChange={setMemberId} options={[{ value: "", label: "全部成员" }, ...data.members.map((member) => ({ value: member.id, label: member.name }))]} /></div>}<button onClick={() => setEditor(true)} className="primary-button"><Edit3 size={16} />{data?.myReport ? "编辑我的周报" : "填写周报"}</button></div></div>{error && <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</div>}{data?.canManage && <div className="grid gap-3 sm:grid-cols-3">{[{ label: "应提交", value: data.summary.expected, icon: Users }, { label: "已提交", value: data.summary.submitted, icon: CheckCircle2 }, { label: "未提交", value: data.summary.missing, icon: FileText }].map((item) => <div className="card flex items-center gap-4 p-4" key={item.label}><span className="grid size-10 place-items-center rounded-xl bg-blue-50 text-blue-600"><item.icon size={18} /></span><div><b className="text-2xl">{item.value}</b><p className="text-xs text-slate-500">{item.label}</p></div></div>)}</div>}{loading ? <div className="grid min-h-64 place-items-center"><LoaderCircle className="animate-spin text-blue-600" /></div> : <div className="grid gap-4 lg:grid-cols-2">{data?.reports.map((report) => <button key={report.id} onClick={() => setSelected(report)} className="card group p-5 text-left transition hover:border-blue-200 hover:shadow-md"><div className="flex items-center gap-3"><span className="grid size-9 place-items-center rounded-full text-xs font-semibold text-white" style={{ backgroundColor: report.author.avatarColor }}>{report.author.name.slice(0, 1)}</span><div><b className="text-sm">{report.author.name}</b><p className="text-xs text-slate-400">{dateText(report.weekStart)} - {dateText(report.weekEnd)}</p></div><span className={`ml-auto rounded-full px-2.5 py-1 text-xs ${report.status === "SUBMITTED" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>{report.status === "SUBMITTED" ? "已提交" : "草稿"}</span></div><div className="mt-4 line-clamp-5 text-sm leading-6 text-slate-500"><ReactMarkdown remarkPlugins={[remarkGfm]}>{report.content}</ReactMarkdown></div><p className="mt-4 text-xs text-blue-600 opacity-0 transition group-hover:opacity-100">查看完整周报</p></button>)}{!data?.reports.length && <div className="card col-span-full p-12 text-center text-sm text-slate-400">{data?.canManage ? "本周期还没有成员提交周报" : "你还没有填写本周期周报"}</div>}</div>}{editor && data && <WeeklyReportEditor teamId={team.id} weekStart={data.week.startLabel} report={data.myReport} close={() => setEditor(false)} saved={async () => { setEditor(false); await load(); }} />}{selected && <ReportDetail report={selected} close={() => setSelected(null)} />}</div>;
+
+  if (team.currentRole === "GUEST") {
+    return <div className="card p-12 text-center text-sm text-slate-400">访客不能查看或提交团队周报</div>;
+  }
+
+  function toggleTeamView() {
+    setLoading(true);
+    const next = !viewingTeam;
+    setViewingTeam(next);
+    setMemberId(next ? "" : "me");
+  }
+
+  function changeWeek(value: string) { setLoading(true); setWeekStart(value); }
+  function changeMember(value: string) { setLoading(true); setMemberId(value); }
+
+  const memberOptions = data ? [
+    { value: "", label: "全部成员", description: "按提交时间排序" },
+    ...data.members.filter((member) => member.id !== data.viewerId).map((member) => ({ value: member.id, label: member.name })),
+  ] : [];
+
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
+        <div>
+          <h3 className="font-semibold">{viewingTeam ? "团队周报" : "我的周报"}</h3>
+          <p className="mt-1 text-sm text-slate-500">{viewingTeam ? "查看团队成员提交的周报与协作风险" : "使用 Markdown 汇报本周完成、下周计划和协作风险"}</p>
+        </div>
+        <div className="flex flex-wrap gap-2 lg:ml-auto">
+          <div className="min-w-44"><SelectField value={weekStart} onChange={changeWeek} options={weekOptions} /></div>
+          {viewingTeam && data?.canManage && <div className="min-w-48"><SelectField value={memberId} onChange={changeMember} options={memberOptions} /></div>}
+          {data?.canManage && (
+            <button onClick={toggleTeamView} className="secondary-button">
+              {viewingTeam ? <UserRound size={16} /> : <Users size={16} />}{viewingTeam ? "只看自己" : "看别人的"}
+            </button>
+          )}
+          <button onClick={() => setEditor(true)} className="primary-button"><Edit3 size={16} />{data?.myReport ? "编辑我的周报" : "填写周报"}</button>
+        </div>
+      </div>
+
+      {error && <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</div>}
+
+      {data?.canManage && viewingTeam && (
+        <div className="grid gap-3 sm:grid-cols-3">
+          {[
+            { label: "应提交", value: data.summary.expected, icon: Users },
+            { label: "已提交", value: data.summary.submitted, icon: CheckCircle2 },
+            { label: "未提交", value: data.summary.missing, icon: FileText },
+          ].map((item) => (
+            <div className="card flex items-center gap-4 p-4" key={item.label}>
+              <span className="grid size-10 place-items-center rounded-xl bg-blue-50 text-blue-600"><item.icon size={18} /></span>
+              <div><b className="text-2xl">{item.value}</b><p className="text-xs text-slate-500">{item.label}</p></div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {loading ? (
+        <div className="grid min-h-64 place-items-center"><LoaderCircle className="animate-spin text-blue-600" /></div>
+      ) : (
+        <div className="grid gap-4 lg:grid-cols-2">
+          {data?.reports.map((report) => (
+            <button key={report.id} onClick={() => setSelected(report)} className="card group p-5 text-left transition hover:border-blue-200 hover:shadow-md">
+              <div className="flex items-center gap-3">
+                <span className="grid size-9 place-items-center rounded-full text-xs font-semibold text-white" style={{ backgroundColor: report.author.avatarColor }}>{report.author.name.slice(0, 1)}</span>
+                <div><b className="text-sm">{report.author.name}</b><p className="text-xs text-slate-400">{dateText(report.weekStart)} - {dateText(report.weekEnd)}</p></div>
+                <span className={`ml-auto rounded-full px-2.5 py-1 text-xs ${report.status === "SUBMITTED" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>{report.status === "SUBMITTED" ? "已提交" : "草稿"}</span>
+              </div>
+              <div className="mt-4 line-clamp-5 text-sm leading-6 text-slate-500"><ReactMarkdown remarkPlugins={[remarkGfm]}>{report.content}</ReactMarkdown></div>
+              <p className="mt-4 flex items-center gap-1 text-xs text-blue-600 opacity-0 transition group-hover:opacity-100"><Eye size={13} />查看完整周报</p>
+            </button>
+          ))}
+          {!data?.reports.length && <div className="card col-span-full p-12 text-center text-sm text-slate-400">{viewingTeam ? "当前筛选范围还没有成员提交周报" : "你还没有填写本周期周报"}</div>}
+        </div>
+      )}
+
+      {editor && data && (
+        <WeeklyReportEditor teamId={team.id} weekStart={data.week.startLabel} report={data.myReport} close={() => setEditor(false)} saved={async () => { setEditor(false); await load(); }} />
+      )}
+      {selected && data && (
+        <ReportDetail report={selected} canEdit={selected.authorId === data.viewerId} close={() => setSelected(null)} edit={() => { setSelected(null); setEditor(true); }} />
+      )}
+    </div>
+  );
 }
 
-function WeeklyReportEditor({ teamId, weekStart, report, close, saved }: { teamId: string; weekStart: string; report: Report | null; close: () => void; saved: () => Promise<void> }) {
-  const [content, setContent] = useState(report?.content || WEEKLY_REPORT_TEMPLATE), [saving, setSaving] = useState(false), [error, setError] = useState("");
-  async function save(action: "DRAFT" | "SUBMIT") { setSaving(true); setError(""); try { await request(`/api/teams/${teamId}/weekly-reports`, { method: "POST", body: JSON.stringify({ weekStart, content, action }) }); await saved(); } catch (cause) { setError(cause instanceof Error ? cause.message : "保存失败"); setSaving(false); } }
-  return <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/30 p-4"><div role="dialog" aria-modal="true" className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl"><div className="flex items-start"><div><h3 className="text-lg font-semibold">填写团队周报</h3><p className="mt-1 text-sm text-slate-400">支持 Markdown，可先保存草稿再正式提交</p></div><button onClick={close} className="ml-auto rounded-lg p-2 text-slate-400 hover:bg-slate-100"><X size={18} /></button></div><form className="mt-5" onSubmit={(event: FormEvent) => { event.preventDefault(); void save("SUBMIT"); }}><div className="grid gap-4 lg:grid-cols-2"><label><span className="mb-2 block text-sm font-medium">Markdown 内容</span><textarea autoFocus value={content} onChange={(event) => setContent(event.target.value)} className="form-input min-h-[420px] resize-y font-mono text-sm leading-6" maxLength={50000} /></label><div><span className="mb-2 block text-sm font-medium">实时预览</span><div className="markdown-content min-h-[420px] rounded-xl border border-slate-200 bg-slate-50 p-5 text-sm leading-6 text-slate-700"><ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown></div></div></div>{error && <p className="mt-3 text-sm text-rose-600">{error}</p>}<div className="mt-5 flex justify-end gap-2 border-t border-slate-100 pt-4"><button type="button" onClick={close} className="secondary-button">取消</button><button type="button" disabled={saving} onClick={() => void save("DRAFT")} className="secondary-button">保存草稿</button><button disabled={saving} className="primary-button">{saving ? <LoaderCircle size={16} className="animate-spin" /> : <Send size={16} />}正式提交</button></div></form></div></div>;
+function WeeklyReportEditor({ teamId, weekStart, report, close, saved }: {
+  teamId: string; weekStart: string; report: Report | null; close: () => void; saved: () => Promise<void>;
+}) {
+  const [content, setContent] = useState(report?.content || WEEKLY_REPORT_TEMPLATE);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  async function save(action: "DRAFT" | "SUBMIT") {
+    setSaving(true); setError("");
+    try {
+      await request(`/api/teams/${teamId}/weekly-reports`, { method: "POST", body: JSON.stringify({ weekStart, content, action }) });
+      await saved();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "保存失败"); setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/30 p-4 sm:p-8">
+      <div role="dialog" aria-modal="true" className="max-h-[88vh] w-full max-w-5xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl sm:p-7">
+        <div className="flex items-start">
+          <div><h3 className="text-lg font-semibold">填写团队周报</h3><p className="mt-1 text-sm text-slate-400">支持 Markdown，可先保存草稿再正式提交</p></div>
+          <button onClick={close} aria-label="关闭" className="ml-auto rounded-lg p-2 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
+        </div>
+        <form className="mt-6" onSubmit={(event: FormEvent) => { event.preventDefault(); void save("SUBMIT"); }}>
+          <div className="grid gap-5 lg:grid-cols-2">
+            <label><span className="mb-2 block text-sm font-medium">Markdown 内容</span><textarea autoFocus value={content} onChange={(event) => setContent(event.target.value)} className="form-input min-h-[360px] resize-y font-mono text-sm leading-6" maxLength={50000} /></label>
+            <div><span className="mb-2 block text-sm font-medium">实时预览</span><div className="markdown-content min-h-[360px] rounded-xl border border-slate-200 bg-slate-50 p-6 text-sm leading-7 text-slate-700"><ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown></div></div>
+          </div>
+          {error && <p className="mt-3 text-sm text-rose-600">{error}</p>}
+          <div className="mt-5 flex justify-end gap-2 border-t border-slate-100 pt-4">
+            <button type="button" onClick={close} className="secondary-button">取消</button>
+            <button type="button" disabled={saving} onClick={() => void save("DRAFT")} className="secondary-button">保存草稿</button>
+            <button disabled={saving} className="primary-button">{saving ? <LoaderCircle size={16} className="animate-spin" /> : <Send size={16} />}正式提交</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
 }
 
-function ReportDetail({ report, close }: { report: Report; close: () => void }) { return <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/30 p-4"><div role="dialog" aria-modal="true" className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl"><div className="flex items-start"><div className="flex items-center gap-3"><span className="grid size-10 place-items-center rounded-full text-sm font-semibold text-white" style={{ backgroundColor: report.author.avatarColor }}>{report.author.name.slice(0, 1)}</span><div><h3 className="font-semibold">{report.author.name}的周报</h3><p className="text-xs text-slate-400">{dateText(report.weekStart)} - {dateText(report.weekEnd)}</p></div></div><button onClick={close} className="ml-auto rounded-lg p-2 text-slate-400 hover:bg-slate-100"><X size={18} /></button></div><div className="markdown-content mt-6 border-t border-slate-100 pt-5 text-sm leading-7 text-slate-700"><ReactMarkdown remarkPlugins={[remarkGfm]}>{report.content}</ReactMarkdown></div></div></div>; }
+function ReportDetail({ report, canEdit, close, edit }: {
+  report: Report; canEdit: boolean; close: () => void; edit: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/30 p-4 sm:p-8">
+      <div role="dialog" aria-modal="true" className="flex max-h-[82vh] w-full max-w-3xl flex-col rounded-2xl bg-white p-6 shadow-2xl sm:p-8">
+        <div className="flex items-center gap-3 border-b border-slate-100 pb-5">
+          <span className="grid size-10 place-items-center rounded-full text-sm font-semibold text-white" style={{ backgroundColor: report.author.avatarColor }}>{report.author.name.slice(0, 1)}</span>
+          <div><h3 className="font-semibold">{report.author.name}的周报</h3><p className="text-xs text-slate-400">{dateText(report.weekStart)} - {dateText(report.weekEnd)}</p></div>
+          {canEdit && <button onClick={edit} className="secondary-button ml-auto"><Edit3 size={15} />编辑</button>}
+          <button onClick={close} aria-label="关闭" className={`${canEdit ? "" : "ml-auto"} rounded-lg p-2 text-slate-400 hover:bg-slate-100`}><X size={18} /></button>
+        </div>
+        <div className="markdown-content overflow-y-auto px-1 py-7 text-sm leading-7 text-slate-700 sm:px-3 sm:py-9">
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{report.content}</ReactMarkdown>
+        </div>
+      </div>
+    </div>
+  );
+}

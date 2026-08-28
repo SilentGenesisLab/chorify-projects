@@ -20,7 +20,9 @@ export async function GET(
   if (!range) return NextResponse.json({ error: "周报周期无效" }, { status: 400 });
   const canManage = isTeamManager(access.membership.role);
   const requestedMember = request.nextUrl.searchParams.get("memberId") || "";
-  const memberId = canManage ? requestedMember : access.userId;
+  const memberId = canManage
+    ? requestedMember === "me" ? access.userId : requestedMember
+    : access.userId;
   const members = await prisma.teamMember.findMany({
     where: { teamId, role: { not: "GUEST" } },
     include: { user: { select: { id: true, name: true, avatarColor: true } } },
