@@ -9,11 +9,20 @@ export const PROJECT_ROLE_LABELS: Record<ProjectRole, string> = {
 };
 
 export async function getProjectAccess(projectId: string, userId: string) {
-  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { id: true, teamId: true } });
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { id: true, teamId: true },
+  });
   if (!project) return null;
   const [projectMember, teamMember] = await Promise.all([
-    prisma.projectMember.findUnique({ where: { projectId_userId: { projectId, userId } } }),
-    prisma.teamMember.findUnique({ where: { teamId_userId: { teamId: project.teamId, userId } } }),
+    prisma.projectMember.findUnique({
+      where: { projectId_userId: { projectId, userId } },
+    }),
+    project.teamId
+      ? prisma.teamMember.findUnique({
+          where: { teamId_userId: { teamId: project.teamId, userId } },
+        })
+      : Promise.resolve(null),
   ]);
   const teamManager = teamMember?.role === "OWNER" || teamMember?.role === "ADMIN";
   const projectManager = projectMember?.role === "OWNER" || projectMember?.role === "MANAGER";
