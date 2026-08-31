@@ -171,6 +171,7 @@ model TeamMember {
   userId         String
   role           TeamRole @default(MEMBER)
   joinedAt       DateTime @default(now())
+  displayName    String?
   title          String?
   responsibility String?
   bio            String?

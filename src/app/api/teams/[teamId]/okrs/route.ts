@@ -18,7 +18,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{t
     const related=allObjectives.filter(objective=>involved(objective,member.userId));
     const keyResults=allObjectives.flatMap(objective=>objective.keyResults).filter(kr=>kr.ownerId===member.userId||kr.alignments.some(x=>x.userId===member.userId));
     const avgProgress=keyResults.length?Math.round(keyResults.reduce((sum,kr)=>sum+Math.min(100,kr.targetValue>0?kr.currentValue/kr.targetValue*100:0),0)/keyResults.length):0;
-    return {userId:member.userId,name:member.user.name,avatarColor:member.user.avatarColor,objectiveCount:related.length,keyResultCount:keyResults.length,avgProgress,atRisk:related.filter(x=>x.status==="AT_RISK").length};
+    return {userId:member.userId,name:member.displayName||member.user.name,avatarColor:member.user.avatarColor,objectiveCount:related.length,keyResultCount:keyResults.length,avgProgress,atRisk:related.filter(x=>x.status==="AT_RISK").length};
   });
   return NextResponse.json({objectives,members:memberSummaries,viewerId:access.userId,canManage:isTeamManager(access.membership.role)});
 }

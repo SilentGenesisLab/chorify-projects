@@ -1,4 +1,4 @@
-import { DELETE as webDELETE, PATCH as webPATCH } from "@/app/api/teams/[teamId]/members/[memberId]/route";
+import { DELETE as webDELETE, GET as webGET, PATCH as webPATCH } from "@/app/api/teams/[teamId]/members/[memberId]/route";
 import { apiRoute } from "@/lib/api-route";
 
 const confirmMember = (body: unknown) => {
@@ -7,3 +7,4 @@ const confirmMember = (body: unknown) => {
 };
 export const PATCH = apiRoute("team:member:manage", webPATCH, { highRisk: true, idempotent: true, confirm: confirmMember });
 export const DELETE = apiRoute("team:member:manage", webDELETE, { highRisk: true, idempotent: true, confirm: confirmMember });
+export const GET = apiRoute("team:read", webGET);
