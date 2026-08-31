@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { decryptTeamInviteToken } from "@/lib/security";
 import { getAppOrigin } from "@/lib/app-url";
-import { getRequestUserId, getTeamMembership, isTeamManager, maskedPhone, TEAM_ROLE_LABELS } from "@/lib/team-permissions";
+import { canCreateTeamProject, getRequestUserId, getTeamMembership, isTeamManager, maskedPhone, TEAM_ROLE_LABELS } from "@/lib/team-permissions";
 import { z } from "zod";
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ teamId: string }> }) {
@@ -21,7 +21,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   return NextResponse.json({ team: {
     id: team.id, name: team.name, description: team.description, mission: team.mission, responsibilities: team.responsibilities, createdAt: team.createdAt,
     currentRole: membership.role, currentRoleLabel: TEAM_ROLE_LABELS[membership.role],
-    permissions: { canManage, canInviteAdmin: membership.role === "OWNER", canCreateProject: canManage },
+    permissions: { canManage, canInviteAdmin: membership.role === "OWNER", canCreateProject: canCreateTeamProject(membership.role) },
     members: team.members.map((item) => ({ id: item.id, userId: item.userId, name: item.user.name, phone: maskedPhone(item.user.phone), avatarColor: item.user.avatarColor, role: item.role, roleLabel: TEAM_ROLE_LABELS[item.role], title: item.title, responsibility: item.responsibility, bio: item.bio, joinedAt: item.joinedAt })),
     projects: team.projects.map((project) => ({ id: project.id, code: project.code, name: project.name, description: project.description, status: project.status, memberCount: project._count.members, taskCount: project._count.tasks, updatedAt: project.updatedAt })),
     invites: invites.map((invite) => {

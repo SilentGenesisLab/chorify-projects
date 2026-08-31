@@ -13,6 +13,8 @@ export const TEAM_ROLE_LABELS: Record<TeamRole, string> = {
 
 export const isTeamManager = (role: TeamRole) => role === "OWNER" || role === "ADMIN";
 
+export const canCreateTeamProject = (role: TeamRole) => role !== "GUEST";
+
 export async function getRequestUserId(request: NextRequest) {
   const apiActor = currentApiActor();
   if (apiActor && request.nextUrl.pathname.startsWith("/api/v1/")) return apiActor.userId;

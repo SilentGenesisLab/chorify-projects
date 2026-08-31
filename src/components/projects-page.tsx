@@ -149,6 +149,7 @@ export function ProjectsPage({
         </div>
         <button
           disabled={!teams.length}
+          title={!teams.length ? "请先加入团队成为正式成员，访客不能新建项目" : undefined}
           onClick={() => setOpen(true)}
           className="primary-button disabled:opacity-50"
         >
