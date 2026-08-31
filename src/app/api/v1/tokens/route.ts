@@ -15,7 +15,18 @@ export async function GET(request: Request) {
   const userId = await authenticatedUserId(request);
   if (!userId) return NextResponse.json({ error: "缺少用户会话" }, { status: 401 });
   const tokens = await prisma.apiToken.findMany({ where: { userId }, select: { id: true, name: true, prefix: true, permissions: true, expiresAt: true, revokedAt: true, lastUsedAt: true, createdAt: true, updatedAt: true }, orderBy: { createdAt: "desc" } });
-  return NextResponse.json({ tokens: tokens.map((token) => ({ ...token, scope: "ALL_USER_RESOURCES" })) });
+  // Keep the legacy presentation fields during the UI migration. They no
+  // longer represent persisted scopes: every key follows the user's live
+  // access, and an empty project list is intentional.
+  return NextResponse.json({
+    tokens: tokens.map((token) => ({
+      ...token,
+      scope: "ALL_USER_RESOURCES",
+      allProjects: true,
+      projects: [],
+    })),
+    projects: [],
+  });
 }
 
 export async function POST(request: Request) {
