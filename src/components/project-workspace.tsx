@@ -34,6 +34,7 @@ type Item = Record<string, unknown> & {
 };
 type Lookup = { id: string; name?: string; title?: string; code?: string };
 type Data = {
+  currentUserId: string;
   requirements: Item[];
   tasks: Item[];
   bugs: Item[];
@@ -45,6 +46,7 @@ type Data = {
 };
 type FormState = Record<string, string | string[]>;
 const empty: Data = {
+  currentUserId: "",
   requirements: [],
   tasks: [],
   bugs: [],
@@ -506,7 +508,12 @@ function Editor({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const [form, setForm] = useState<FormState>(() => initial(module, item)),
+  const [form, setForm] = useState<FormState>(() => {
+      const value = initial(module, item);
+      return module === "tasks" && !item && data.members.some((member) => member.id === data.currentUserId)
+        ? { ...value, assigneeId: data.currentUserId }
+        : value;
+    }),
     [saving, setSaving] = useState(false),
     [error, setError] = useState("");
   const set = (key: string, value: string | string[]) =>
@@ -722,7 +729,16 @@ function Fields({
         label="状态"
         value={form.status as string}
         set={(v) => set("status", v)}
-        options={statuses[module]}
+        options={module === "tasks" && ["PENDING_ACCEPTANCE", "ACCEPTED", "DONE"].includes(form.status as string)
+          ? [form.status as string]
+          : module === "tasks"
+          ? [...new Set([
+              form.status as string,
+              "TODO",
+              "IN_PROGRESS",
+              ...((form.assigneeId as string) === data.currentUserId ? ["PENDING_ACCEPTANCE"] : []),
+            ])]
+          : statuses[module]}
       />
       {module === "requirements" && (
         <>

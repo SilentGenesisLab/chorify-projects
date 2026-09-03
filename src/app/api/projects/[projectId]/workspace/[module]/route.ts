@@ -5,8 +5,9 @@ import { prisma } from "@/lib/prisma";
 import { getRequestUserId } from "@/lib/team-permissions";
 import { getProjectAccess } from "@/lib/project-permissions";
 import { nextTaskCompletedAt } from "@/lib/project-overview";
+import { opaqueId, optionalOpaqueId, prepareTaskCreate, taskFieldsSchema } from "@/lib/task-workflow";
 
-const optionalId = z.string().cuid().nullable().optional();
+const optionalId = optionalOpaqueId;
 const schemas = {
   requirements: z.object({
     title: z.string().trim().min(2).max(120),
@@ -15,31 +16,9 @@ const schemas = {
     priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]),
     status: z.string().trim().min(1).max(30),
     targetVersionId: optionalId,
-    participantIds: z.array(z.string().cuid()).default([]),
+    participantIds: z.array(opaqueId).default([]),
   }),
-  tasks: z.object({
-    title: z.string().trim().min(2).max(120),
-    description: z.string().trim().max(5000).default(""),
-    acceptanceCriteria: z.string().trim().min(2).max(5000),
-    priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]),
-    status: z
-      .enum([
-        "TODO",
-        "IN_PROGRESS",
-        "PENDING_ACCEPTANCE",
-        "NEEDS_CHANGES",
-        "ACCEPTED",
-        "DONE",
-      ])
-      .default("TODO"),
-    dueAt: z.string().datetime().nullable().optional(),
-    requirementId: optionalId,
-    versionId: optionalId,
-    assigneeId: optionalId,
-    coordinatorId: optionalId,
-    acceptorId: optionalId,
-    dependencyIds: z.array(z.string().cuid()).default([]),
-  }),
+  tasks: taskFieldsSchema.extend({ status: taskFieldsSchema.shape.status.default("TODO") }),
   bugs: z.object({
     title: z.string().trim().min(2).max(120),
     description: z.string().trim().max(5000).default(""),
@@ -82,11 +61,11 @@ const schemas = {
     plannedAt: z.string().datetime().nullable().optional(),
     description: z.string().trim().max(20000).default(""),
     ownerId: optionalId,
-    participantIds: z.array(z.string().cuid()).default([]),
-    fileIds: z.array(z.string().cuid()).default([]),
+    participantIds: z.array(opaqueId).default([]),
+    fileIds: z.array(opaqueId).default([]),
   }),
   releases: z.object({
-    versionId: z.string().cuid(),
+    versionId: opaqueId,
     build: z.string().trim().min(1).max(80),
     environment: z.string().trim().min(1).max(50),
     notes: z.string().trim().max(5000).default(""),
@@ -149,8 +128,6 @@ export async function POST(
   );
   if (participantIds.some((id) => !projectMemberIds.has(id)))
     return NextResponse.json({ error: "参与人必须是项目成员" }, { status: 400 });
-  if (module === "tasks" && [data.assigneeId, data.coordinatorId, data.acceptorId].some((id) => id && !projectMemberIds.has(String(id))))
-    return NextResponse.json({ error: "任务负责人、对接人和验收人必须是项目成员" }, { status: 400 });
   if (module === "versions" && ownerId && ownerId !== userId && !projectMemberIds.has(ownerId))
     return NextResponse.json({ error: "负责人必须是项目成员" }, { status: 400 });
   if (module === "versions" && fileIds.length) {
@@ -178,8 +155,10 @@ export async function POST(
     });
   }
   else if (module === "tasks") {
-    const { dependencyIds, ...taskData } = data;
-    const completedAt = nextTaskCompletedAt(String(data.status), null);
+    const prepared = await prepareTaskCreate(projectId, userId, data as unknown as z.infer<typeof taskFieldsSchema>);
+    if (!prepared.ok) return NextResponse.json({ error: prepared.error }, { status: prepared.status });
+    const { dependencyIds, ...taskData } = prepared.value;
+    const completedAt = nextTaskCompletedAt(String(prepared.value.status), null);
     item = await prisma.task.create({
       data: {
         ...taskData,

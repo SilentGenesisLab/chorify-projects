@@ -107,7 +107,11 @@ Codex 在个人 API Key 授权范围内读取和执行
 - `DELETE /api/v1/tokens/:tokenId`：不可恢复地撤销令牌
 - `GET /api/v1/me/work-context`：需要 `task:read`
 - `GET /api/v1/tasks/:taskId/context`：需要 `task:read`
+- `PATCH /api/v1/tasks/:taskId`：快捷调整优先级或合法状态，需要 `task:update`
 - `POST /api/v1/tasks/:taskId/reports`：需要 `task:report`
+- `POST /api/v1/tasks/:taskId/acceptances`：仅指定验收人可通过闭环或退回，需要 `task:accept` 和 `Idempotency-Key`
+
+创建任务时应提交从项目成员中解析出的明确 `assigneeId`。未指定验收人时，系统优先使用关联需求的提出者，没有关联需求时使用任务创建人；验收通过后任务直接闭环为 `DONE`。
 
 令牌支持多项目和细粒度权限。业务接口同时校验用户项目成员身份、令牌项目范围和所需权限。已预留 `project:*`、`requirement:*`、`task:*`、`bug:*`、`version:*`、`file:*` 和 `document:*` 权限命名空间。
 

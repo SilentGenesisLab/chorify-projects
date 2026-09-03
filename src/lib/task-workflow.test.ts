@@ -1,0 +1,42 @@
+import { describe, expect, it } from "vitest";
+import { opaqueId, taskPatchSchema, taskQuickUpdateSchema, validateTaskStatusTransition } from "@/lib/task-workflow";
+
+const task = (overrides: Partial<{ assigneeId: string | null; acceptorId: string | null; status: "TODO" | "IN_PROGRESS" | "PENDING_ACCEPTANCE" | "NEEDS_CHANGES" | "ACCEPTED" | "DONE" }> = {}) => ({
+  assigneeId: "owner",
+  acceptorId: "acceptor",
+  status: "IN_PROGRESS" as const,
+  ...overrides,
+});
+
+describe("task workflow", () => {
+  it("treats migrated database ids as opaque strings", () => {
+    expect(opaqueId.safeParse("legacy-task-owner-001").success).toBe(true);
+    expect(opaqueId.safeParse("").success).toBe(false);
+  });
+
+  it("allows only the task owner to submit acceptance", () => {
+    expect(validateTaskStatusTransition(task(), "owner", false, "PENDING_ACCEPTANCE")).toBeNull();
+    expect(validateTaskStatusTransition(task(), "manager", true, "PENDING_ACCEPTANCE")?.status).toBe(403);
+  });
+
+  it("requires an acceptor before submitting acceptance", () => {
+    expect(validateTaskStatusTransition(task({ acceptorId: null }), "owner", false, "PENDING_ACCEPTANCE")?.status).toBe(409);
+  });
+
+  it("protects pending and terminal states from ordinary updates", () => {
+    expect(validateTaskStatusTransition(task({ status: "PENDING_ACCEPTANCE" }), "owner", true, "IN_PROGRESS")?.status).toBe(409);
+    expect(validateTaskStatusTransition(task({ status: "DONE" }), "owner", true, "IN_PROGRESS")?.status).toBe(409);
+    expect(validateTaskStatusTransition(task(), "owner", true, "DONE")?.status).toBe(403);
+  });
+
+  it("only accepts quick-update fields", () => {
+    expect(taskQuickUpdateSchema.safeParse({ priority: "URGENT" }).success).toBe(true);
+    expect(taskQuickUpdateSchema.safeParse({}).success).toBe(false);
+    expect(taskQuickUpdateSchema.safeParse({ status: "DONE" }).success).toBe(false);
+  });
+
+  it("keeps omitted fields absent in partial task patches", () => {
+    const parsed = taskPatchSchema.parse({ priority: "HIGH" });
+    expect(parsed).toEqual({ priority: "HIGH" });
+  });
+});

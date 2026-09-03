@@ -5,8 +5,9 @@ import { prisma } from "@/lib/prisma";
 import { getRequestUserId } from "@/lib/team-permissions";
 import { getProjectAccess } from "@/lib/project-permissions";
 import { nextTaskCompletedAt } from "@/lib/project-overview";
+import { opaqueId, optionalOpaqueId, taskPatchSchema, validateTaskReferences, validateTaskStatusTransition } from "@/lib/task-workflow";
 
-const ids = z.string().cuid().nullable().optional();
+const ids = optionalOpaqueId;
 const baseSchemas = {
   requirements: z.object({
     title: z.string().min(2).max(120),
@@ -15,29 +16,9 @@ const baseSchemas = {
     priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]),
     status: z.string().min(1).max(30),
     targetVersionId: ids,
-    participantIds: z.array(z.string().cuid()).default([]),
+    participantIds: z.array(opaqueId).default([]),
   }),
-  tasks: z.object({
-    title: z.string().min(2).max(120),
-    description: z.string().max(5000),
-    acceptanceCriteria: z.string().min(2).max(5000),
-    priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]),
-    status: z.enum([
-      "TODO",
-      "IN_PROGRESS",
-      "PENDING_ACCEPTANCE",
-      "NEEDS_CHANGES",
-      "ACCEPTED",
-      "DONE",
-    ]),
-    dueAt: z.string().datetime().nullable().optional(),
-    requirementId: ids,
-    versionId: ids,
-    assigneeId: ids,
-    coordinatorId: ids,
-    acceptorId: ids,
-    dependencyIds: z.array(z.string().cuid()).default([]),
-  }),
+  tasks: taskPatchSchema,
   bugs: z.object({
     title: z.string().min(2).max(120),
     description: z.string().max(5000),
@@ -76,11 +57,11 @@ const baseSchemas = {
     plannedAt: z.string().datetime().nullable().optional(),
     description: z.string().max(20000),
     ownerId: ids,
-    participantIds: z.array(z.string().cuid()).default([]),
-    fileIds: z.array(z.string().cuid()).default([]),
+    participantIds: z.array(opaqueId).default([]),
+    fileIds: z.array(opaqueId).default([]),
   }),
   releases: z.object({
-    versionId: z.string().cuid(),
+    versionId: opaqueId,
     build: z.string().min(1).max(80),
     environment: z.string().min(1).max(50),
     notes: z.string().max(5000),
@@ -154,8 +135,6 @@ export async function PATCH(
   );
   if (participantIds.some((id) => !projectMemberIds.has(id)))
     return NextResponse.json({ error: "参与人必须是项目成员" }, { status: 400 });
-  if (module === "tasks" && [data.assigneeId, data.coordinatorId, data.acceptorId].some((id) => id && !projectMemberIds.has(String(id))))
-    return NextResponse.json({ error: "任务负责人、对接人和验收人必须是项目成员" }, { status: 400 });
   if (module === "versions" && ownerId && ownerId !== userId && !projectMemberIds.has(ownerId))
     return NextResponse.json({ error: "负责人必须是项目成员" }, { status: 400 });
   if (module === "versions" && fileIds.length) {
@@ -164,26 +143,32 @@ export async function PATCH(
       return NextResponse.json({ error: "只能引用当前项目中有效的文件" }, { status: 400 });
   }
   if (module === "tasks") {
+    const invalid = await validateTaskReferences(projectId, data, itemId);
+    if (invalid) return NextResponse.json({ error: invalid }, { status: 400 });
     const { dependencyIds, ...taskData } = data;
-    if ((dependencyIds as string[]).includes(itemId))
-      return NextResponse.json({ error: "任务不能依赖自身" }, { status: 400 });
     const existing = await prisma.task.findUnique({
       where: { id: itemId },
-      select: { completedAt: true },
+      select: { completedAt: true, status: true, assigneeId: true, acceptorId: true },
     });
-    const completedAt = nextTaskCompletedAt(String(data.status), existing?.completedAt);
+    if (existing && data.status && data.status !== existing.status) {
+      const canWrite = Boolean(access.canManage || (access.projectMember && access.projectMember.role !== "GUEST"));
+      const transitionError = validateTaskStatusTransition(existing, userId, canWrite, data.status as typeof existing.status);
+      if (transitionError) return NextResponse.json({ error: transitionError.error }, { status: transitionError.status });
+    }
+    const completedAt = data.status === undefined ? existing?.completedAt : nextTaskCompletedAt(String(data.status), existing?.completedAt);
+    const taskDependencyIds = dependencyIds as string[] | undefined;
     await prisma.$transaction([
-      prisma.taskDependency.deleteMany({ where: { taskId: itemId } }),
+      ...(taskDependencyIds === undefined ? [] : [prisma.taskDependency.deleteMany({ where: { taskId: itemId } })]),
       prisma.task.update({
         where: { id: itemId },
         data: {
           ...taskData,
           completedAt,
-          closedAt: completedAt,
+          ...(data.status === undefined ? {} : { closedAt: completedAt }),
         } as Prisma.TaskUncheckedUpdateInput,
       }),
-      ...((dependencyIds as string[]).length
-        ? [prisma.taskDependency.createMany({ data: (dependencyIds as string[]).map((dependsOnId) => ({ taskId: itemId, dependsOnId })) })]
+      ...(taskDependencyIds?.length
+        ? [prisma.taskDependency.createMany({ data: taskDependencyIds.map((dependsOnId) => ({ taskId: itemId, dependsOnId })) })]
         : []),
     ]);
   } else if (module === "requirements") {

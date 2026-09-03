@@ -92,6 +92,7 @@ export async function GET(
     fileIds: versionLinks.filter((x) => x.resourceId === version.id).map((x) => x.fileId),
   }));
   return NextResponse.json({
+    currentUserId: userId,
     requirements,
     tasks: tasks.map(({ reports, ...task }) => ({ ...task, submittedAt: reports[0]?.createdAt || null })),
     bugs,

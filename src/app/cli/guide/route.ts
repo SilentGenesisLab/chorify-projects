@@ -42,7 +42,7 @@ chorify create tasks <project-id> '{"title":"实现登录页","priority":"HIGH"}
 chorify update tasks <project-id> <task-id> '{"status":"IN_PROGRESS"}'
 chorify task-context <task-id>
 chorify task-report <task-id> '{"summary":"已完成登录页","details":"构建与测试通过"}'
-chorify task-accept <task-id> '{"action":"APPROVE","comment":"验收通过"}'
+chorify task-accept <task-id> '{"decision":"PASS","conclusion":"验收标准已满足","verificationEvidence":"测试与交付物均已核对"}'
 \`\`\`
 
 支持资源：projects、requirements、tasks、bugs、versions、releases、members、milestones、files、folders、teams、notifications、audit-logs。
