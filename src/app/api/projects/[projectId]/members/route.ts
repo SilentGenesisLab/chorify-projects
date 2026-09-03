@@ -9,6 +9,7 @@ const userSelect = {
   name: true,
   phone: true,
   avatarColor: true,
+  avatarUrl: true,
 } as const;
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ projectId: string }> }) {
@@ -28,6 +29,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     },
   });
   if (!project) return NextResponse.json({ error: "项目不存在" }, { status: 404 });
+  const teamProfiles = project.teamId
+    ? await prisma.teamMember.findMany({ where: { teamId: project.teamId, userId: { in: project.members.map((member) => member.userId) } }, select: { userId: true, displayName: true, title: true, responsibility: true, bio: true } })
+    : [];
+  const teamProfileByUser = new Map(teamProfiles.map((profile) => [profile.userId, profile]));
   const query = request.nextUrl.searchParams.get("q")?.trim() || "";
   const candidates = project.teamId
     ? (
@@ -65,16 +70,24 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       canManage: access.canManage,
       canAssignManagers: access.canAssignManagers,
     },
-    members: project.members.map((member) => ({
+    viewerUserId: userId,
+    members: project.members.map((member) => {
+      const teamProfile = teamProfileByUser.get(member.userId);
+      return {
       id: member.id,
       userId: member.userId,
-      name: member.user.name,
+      name: member.displayName || teamProfile?.displayName || member.user.name,
+      accountName: member.user.name,
       phone: maskedPhone(member.user.phone),
       avatarColor: member.user.avatarColor,
+      avatarUrl: member.avatarUrl || member.user.avatarUrl,
       role: member.role,
       roleLabel: PROJECT_ROLE_LABELS[member.role],
-      responsibility: member.responsibility,
-    })),
+      title: member.title || teamProfile?.title || null,
+      responsibility: member.responsibility || teamProfile?.responsibility || null,
+      bio: member.bio || teamProfile?.bio || null,
+    };
+    }),
     teamMembers: candidates.map((candidate) => ({
       userId: candidate.user.id,
       name: candidate.user.name,

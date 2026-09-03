@@ -162,6 +162,9 @@ model User {
   sentTeamMessages          TeamMessage[]            @relation("TeamMessageSender")
   receivedTeamMessages      TeamMessageRecipient[]
   weeklyReports             TeamWeeklyReport[]
+  usageCollectorRegistrations UsageCollectorRegistration[]
+  usageCollectorDevices     UsageCollectorDevice[]
+  tokenUsageDaily           TokenUsageDaily[]
   createdAt                 DateTime                 @default(now())
   updatedAt                 DateTime                 @updatedAt
 }
@@ -382,11 +385,83 @@ model ProjectMember {
   projectId      String
   userId         String
   role           ProjectRole
+  displayName    String?
+  title          String?
   responsibility String?
+  bio            String?
+  avatarUrl      String?
   project        Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
   user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([projectId, userId])
+}
+
+model UsageCollectorRegistration {
+  id        String    @id @default(cuid())
+  userId    String
+  codeHash  String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+
+  @@index([userId, expiresAt])
+}
+
+model UsageCollectorDevice {
+  id            String                   @id @default(cuid())
+  userId        String
+  deviceId      String
+  name          String
+  platform      String
+  clientVersion String
+  secretPrefix  String
+  secretHash    String                   @unique
+  lastSeenAt    DateTime?
+  lastStatus    String                   @default("REGISTERED")
+  lastError     String?
+  revokedAt     DateTime?
+  user          User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  usage         TokenUsageDaily[]
+  receipts      TokenUsageEventReceipt[]
+  createdAt     DateTime                 @default(now())
+  updatedAt     DateTime                 @updatedAt
+
+  @@unique([userId, deviceId])
+  @@index([userId, revokedAt])
+}
+
+model TokenUsageDaily {
+  id              String               @id @default(cuid())
+  userId          String
+  deviceId        String
+  date            DateTime
+  tool            String
+  model           String
+  inputTokens     BigInt               @default(0)
+  outputTokens    BigInt               @default(0)
+  cacheTokens     BigInt               @default(0)
+  reasoningTokens BigInt               @default(0)
+  sessions        Int                  @default(0)
+  estimatedCost   Decimal?             @db.Decimal(18, 6)
+  user            User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  device          UsageCollectorDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  @@unique([deviceId, date, tool, model])
+  @@index([userId, date])
+}
+
+model TokenUsageEventReceipt {
+  id        String               @id @default(cuid())
+  deviceId  String
+  eventHash String
+  device    UsageCollectorDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  createdAt DateTime             @default(now())
+
+  @@unique([deviceId, eventHash])
+  @@index([createdAt])
 }
 
 model Requirement {

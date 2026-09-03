@@ -5,9 +5,10 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import { ProjectWorkspace } from "@/components/project-workspace";
 import { ProjectOverview } from "@/components/project-overview";
 import { ProjectActivity } from "@/components/project-activity";
+import { ProjectMemberProfile, ProjectPersonalInfo } from "@/components/project-member-profile";
 import { FileManager } from "@/components/file-manager";
 import { SelectField } from "@/components/ui/select-field";
-import { Bug, AlertTriangle, Check, CheckCircle2, ChevronRight, FileClock, FileText, Folder, FolderKanban, LayoutDashboard, ListChecks, LoaderCircle, MoreHorizontal, Pencil, Plus, Rocket, Search, Target, Trash2, UserPlus, Users, X } from "lucide-react";
+import { Bug, AlertTriangle, Check, CheckCircle2, ChevronRight, FileClock, FileText, Folder, FolderKanban, LayoutDashboard, ListChecks, LoaderCircle, MoreHorizontal, Pencil, Plus, Rocket, Search, Target, Trash2, UserPlus, UserRound, Users, X } from "lucide-react";
 
 type Project = {
   id: string;
@@ -26,9 +27,10 @@ type Project = {
   taskCount: number;
 };
 type Team = { id: string; name: string };
-type Section = "overview" | "activity" | "team" | "requirements" | "tasks" | "bugs" | "versions" | "files";
+type Section = "overview" | "profile" | "activity" | "team" | "requirements" | "tasks" | "bugs" | "versions" | "files";
 const sections: { id: Section; label: string; icon: typeof LayoutDashboard }[] = [
   { id: "overview", label: "概览", icon: LayoutDashboard },
+  { id: "profile", label: "个人信息", icon: UserRound },
   { id: "activity", label: "项目动态", icon: FileClock },
   { id: "team", label: "团队管理", icon: Users },
   { id: "requirements", label: "需求管理", icon: Target },
@@ -281,6 +283,7 @@ function ProjectDetail({ project, section }: { project: Project; section: Sectio
 function ProjectSection({ project, section }: { project: Project; section: Section }) {
   if (section === "files") return <FileManager lockedProjectId={project.id} />;
   if (section === "team") return <ProjectTeam project={project} />;
+  if (section === "profile") return <ProjectPersonalInfo projectId={project.id} />;
   if (section === "requirements" || section === "tasks" || section === "bugs" || section === "versions") return <ProjectWorkspace projectId={project.id} module={section} />;
   if (section === "overview") return <ProjectOverview projectId={project.id} />;
   if (section === "activity") return <ProjectActivity projectId={project.id} />;
@@ -356,6 +359,7 @@ function ProjectSection({ project, section }: { project: Project; section: Secti
 
 type ProjectMemberRole = "OWNER" | "MANAGER" | "MEMBER" | "GUEST";
 type ProjectTeamData = {
+  viewerUserId: string;
   project: {
     id: string;
     name: string;
@@ -369,6 +373,9 @@ type ProjectTeamData = {
     name: string;
     phone: string;
     avatarColor: string;
+    avatarUrl: string | null;
+    title: string | null;
+    bio: string | null;
     role: ProjectMemberRole;
     roleLabel: string;
     responsibility: string | null;
@@ -405,7 +412,8 @@ function ProjectTeam({ project }: { project: Project }) {
     [loading, setLoading] = useState(true),
     [error, setError] = useState(""),
     [open, setOpen] = useState(false),
-    [busy, setBusy] = useState("");
+    [busy, setBusy] = useState(""),
+    [viewing, setViewing] = useState<string | null>(null);
   const load = useCallback(async () => {
     try {
       const result = await projectRequest<ProjectTeamData>(`/api/projects/${project.id}/members`);
@@ -609,6 +617,7 @@ function ProjectTeam({ project }: { project: Project }) {
                       <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs text-blue-700">{data.project.team?.name || "个人项目"}</span>
                     </td>
                     <td className="px-5 py-3 text-right">
+                      <button onClick={() => setViewing(member.id)} title="查看个人信息" className="rounded-lg p-2 text-slate-400 hover:bg-blue-50 hover:text-blue-600"><UserRound size={16} /></button>
                       {editable && (
                         <button disabled={busy === member.id} onClick={() => void remove(member)} title="移出项目" className="rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-40">
                           <Trash2 size={16} />
@@ -635,6 +644,7 @@ function ProjectTeam({ project }: { project: Project }) {
           }}
         />
       )}
+      {viewing && <ProjectMemberProfile projectId={project.id} memberId={viewing} close={() => setViewing(null)} />}
     </div>
   );
 }

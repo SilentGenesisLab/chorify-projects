@@ -14,6 +14,7 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   REMOVE_TEAM_MEMBER: "移除团队成员",
   ADD_PROJECT_MEMBERS: "添加项目成员",
   UPDATE_PROJECT_MEMBER: "更新项目成员",
+  UPDATE_PROJECT_MEMBER_PROFILE: "更新项目成员档案",
   REMOVE_PROJECT_MEMBER: "移除项目成员",
   CREATE_REQUIREMENT: "创建需求",
   UPDATE_REQUIREMENT: "更新需求",
@@ -40,6 +41,10 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   READ_WORK_CONTEXT: "读取工作上下文",
   READ_TASK_CONTEXT: "读取任务上下文",
   SUBMIT_FEEDBACK: "提交反馈",
+  CREATE_USAGE_COLLECTOR_REGISTRATION: "生成 Token 采集注册码",
+  REGISTER_USAGE_COLLECTOR_DEVICE: "接入 Token 采集设备",
+  REVOKE_USAGE_COLLECTOR_DEVICE: "撤销 Token 采集设备",
+  USAGE_COLLECTOR_ERROR: "Token 采集异常",
 };
 
 export const AUDIT_RESOURCE_LABELS: Record<string, string> = {
@@ -57,6 +62,8 @@ export const AUDIT_RESOURCE_LABELS: Record<string, string> = {
   FILE: "文件",
   FILE_FOLDER: "文件夹",
   API_TOKEN: "API Key",
+  USAGE_COLLECTOR: "Token 采集器",
+  USAGE_COLLECTOR_DEVICE: "Token 采集设备",
   FEEDBACK: "反馈",
 };
 
