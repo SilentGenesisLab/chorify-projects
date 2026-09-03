@@ -16,7 +16,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ upl
     const version = await tx.fileVersion.create({ data: { fileId: asset.id, version: existing ? existing._count.versions + 1 : 1, objectKey: upload.objectKey, originalName: upload.name, mimeType: upload.mimeType, size: upload.size, sha256: input.data.sha256?.toLowerCase(), uploaderId: user.id } });
     await tx.fileAsset.update({ where: { id: asset.id }, data: { currentVersionId: version.id, mimeType: version.mimeType, size: version.size, storageKey: version.objectKey } });
     await tx.fileUploadSession.update({ where: { id: upload.id }, data: { status: "COMPLETED" } });
-    await tx.auditLog.create({ data: { userId: user.id, actorType: "USER", action: existing ? "UPLOAD_FILE_VERSION" : "UPLOAD_FILE", resource: "FILE", resourceId: asset.id, channel: "WEB", metadata: { projectId: upload.projectId, version: version.version, size: Number(version.size) } } });
+    await tx.auditLog.create({ data: { userId: user.id, projectId: upload.projectId, actorType: "USER", action: existing ? "UPLOAD_FILE_VERSION" : "UPLOAD_FILE", resource: "FILE", resourceId: asset.id, channel: "WEB", metadata: { projectId: upload.projectId, version: version.version, size: Number(version.size) } } });
     return asset;
   });
   return NextResponse.json({ file: { id: file.id, name: file.name } });

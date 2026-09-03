@@ -166,6 +166,7 @@ export async function POST(
         projectId,
         createdById: userId,
         completedAt,
+        firstCompletedAt: completedAt,
         closedAt: completedAt,
       } as Prisma.TaskUncheckedCreateInput,
     });
@@ -178,7 +179,12 @@ export async function POST(
       });
   } else if (module === "bugs")
     item = await prisma.bug.create({
-      data: { ...data, code, projectId } as Prisma.BugUncheckedCreateInput,
+      data: {
+        ...data,
+        code,
+        projectId,
+        closedAt: data.status === "CLOSED" || data.status === "REJECTED" ? new Date() : null,
+      } as Prisma.BugUncheckedCreateInput,
     });
   else if (module === "versions") {
     const { participantIds: _participantIds, fileIds: _fileIds, ownerId: _ownerId, ...versionData } = data;
@@ -208,6 +214,7 @@ export async function POST(
   await prisma.auditLog.create({
     data: {
       userId,
+      projectId,
       actorType: "USER",
       action: `CREATE_${moduleResource[module as keyof typeof moduleResource]}`,
       resource: moduleResource[module as keyof typeof moduleResource],

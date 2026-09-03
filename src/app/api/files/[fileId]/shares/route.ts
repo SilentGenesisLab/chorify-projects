@@ -11,6 +11,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ fil
   const file = await prisma.fileAsset.findUnique({ where: { id: fileId } }); if (!file || file.deletedAt) return NextResponse.json({ error: "文件不存在" }, { status: 404 }); if (!(await fileScopeAccess(user.id, file.projectId, file.creatorId)).canManage) return NextResponse.json({ error: "没有创建外部分享的权限" }, { status: 403 });
   const token = randomBytes(32).toString("base64url"), tokenHash = createHash("sha256").update(token).digest("hex"), codeHash = input.data.code ? await bcrypt.hash(input.data.code, 12) : null;
   const share = await prisma.fileShare.create({ data: { projectId: file.projectId, fileId, creatorId: user.id, tokenHash, codeHash, expiresAt: new Date(Date.now() + input.data.expiresInDays * 86400000), maxDownloads: input.data.maxDownloads || null } });
-  await prisma.auditLog.create({ data: { userId: user.id, actorType: "USER", action: "CREATE_FILE_SHARE", resource: "FILE", resourceId: file.id, channel: "WEB", metadata: { shareId: share.id, expiresAt: share.expiresAt } } });
+  await prisma.auditLog.create({ data: { userId: user.id, projectId: file.projectId, actorType: "USER", action: "CREATE_FILE_SHARE", resource: "FILE", resourceId: file.id, channel: "WEB", metadata: { projectId: file.projectId, shareId: share.id, expiresAt: share.expiresAt } } });
   return NextResponse.json({ share: { id: share.id, url: `${process.env.APP_URL || new URL(request.url).origin}/share/${token}`, expiresAt: share.expiresAt } }, { status: 201 });
 }

@@ -142,6 +142,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     await tx.auditLog.create({
       data: {
         userId,
+        projectId,
         actorType: "USER",
         action: "ADD_PROJECT_MEMBERS",
         resource: "PROJECT",

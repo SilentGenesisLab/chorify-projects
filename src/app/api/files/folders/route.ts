@@ -13,6 +13,6 @@ export async function POST(request: Request) {
   if (depth >= 20) return NextResponse.json({ error: "目录层级不能超过 20 层" }, { status: 400 });
   const duplicate = await prisma.fileFolder.findFirst({ where: { projectId: input.data.projectId, parentId: input.data.parentId || null, name: input.data.name, deletedAt: null } }); if (duplicate) return NextResponse.json({ error: "同级已有同名文件夹" }, { status: 409 });
   const folder = await prisma.fileFolder.create({ data: { projectId: input.data.projectId, parentId: input.data.parentId || null, name: input.data.name, path: `${parentPath}/${input.data.name}`, creatorId: user.id } });
-  await prisma.auditLog.create({ data: { userId: user.id, actorType: "USER", action: "CREATE_FOLDER", resource: "FILE_FOLDER", resourceId: folder.id, channel: "WEB", metadata: { projectId: folder.projectId } } });
+  await prisma.auditLog.create({ data: { userId: user.id, projectId: folder.projectId, actorType: "USER", action: "CREATE_FOLDER", resource: "FILE_FOLDER", resourceId: folder.id, channel: "WEB", metadata: { projectId: folder.projectId } } });
   return NextResponse.json({ folder }, { status: 201 });
 }

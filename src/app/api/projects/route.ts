@@ -107,6 +107,7 @@ export async function POST(request: NextRequest) {
     await tx.auditLog.create({
       data: {
         userId,
+        projectId: created.id,
         actorType: "USER",
         action: "CREATE_PROJECT",
         resource: "PROJECT",

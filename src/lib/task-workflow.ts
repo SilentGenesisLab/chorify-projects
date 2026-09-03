@@ -129,6 +129,7 @@ export async function quickUpdateTask(taskId: string, userId: string, input: z.i
     await tx.auditLog.create({
       data: {
         userId,
+        projectId: task.projectId,
         actorType: "USER",
         action: input.status === "PENDING_ACCEPTANCE" ? "SUBMIT_TASK_ACCEPTANCE" : "QUICK_UPDATE_TASK",
         resource: "TASK",
@@ -178,11 +179,12 @@ export async function acceptTask(taskId: string, userId: string, input: z.infer<
     });
     await tx.task.update({
       where: { id: taskId },
-      data: { status: passed ? "DONE" : "NEEDS_CHANGES", completedAt: passed ? now : null, closedAt: passed ? now : null },
+      data: { status: passed ? "DONE" : "NEEDS_CHANGES", completedAt: passed ? now : null, firstCompletedAt: passed ? task.firstCompletedAt || now : task.firstCompletedAt, closedAt: passed ? now : null },
     });
     await tx.auditLog.create({
       data: {
         userId,
+        projectId: task.projectId,
         actorType: "USER",
         action: passed ? "CLOSE_TASK" : "REJECT_TASK_ACCEPTANCE",
         resource: "TASK",

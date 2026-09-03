@@ -54,6 +54,7 @@ export async function PATCH(request: NextRequest, { params }: Context) {
     await tx.auditLog.create({
       data: {
         userId: auth.userId,
+        projectId,
         actorType: "USER",
         action: "UPDATE_MILESTONE",
         resource: "MILESTONE",
@@ -82,6 +83,7 @@ export async function DELETE(request: NextRequest, { params }: Context) {
     prisma.auditLog.create({
       data: {
         userId: auth.userId,
+        projectId,
         actorType: "USER",
         action: "DELETE_MILESTONE",
         resource: "MILESTONE",

@@ -148,7 +148,7 @@ export async function PATCH(
     const { dependencyIds, ...taskData } = data;
     const existing = await prisma.task.findUnique({
       where: { id: itemId },
-      select: { completedAt: true, status: true, assigneeId: true, acceptorId: true },
+      select: { completedAt: true, firstCompletedAt: true, status: true, assigneeId: true, acceptorId: true },
     });
     if (existing && data.status && data.status !== existing.status) {
       const canWrite = Boolean(access.canManage || (access.projectMember && access.projectMember.role !== "GUEST"));
@@ -164,6 +164,7 @@ export async function PATCH(
         data: {
           ...taskData,
           completedAt,
+          firstCompletedAt: existing?.firstCompletedAt || completedAt,
           ...(data.status === undefined ? {} : { closedAt: completedAt }),
         } as Prisma.TaskUncheckedUpdateInput,
       }),
@@ -189,8 +190,14 @@ export async function PATCH(
       } as Prisma.RequirementUpdateInput,
     });
   }
-  else if (module === "bugs")
-    await prisma.bug.update({ where: { id: itemId }, data: data as Prisma.BugUncheckedUpdateInput });
+  else if (module === "bugs") {
+    const existing = await prisma.bug.findUnique({ where: { id: itemId }, select: { closedAt: true } });
+    const closed = data.status === "CLOSED" || data.status === "REJECTED";
+    await prisma.bug.update({
+      where: { id: itemId },
+      data: { ...data, closedAt: closed ? existing?.closedAt || new Date() : null } as Prisma.BugUncheckedUpdateInput,
+    });
+  }
   else if (module === "versions") {
     const { participantIds: _participantIds, fileIds: _fileIds, ownerId: _ownerId, ...versionData } = data;
     void _participantIds; void _fileIds; void _ownerId;
@@ -220,6 +227,7 @@ export async function PATCH(
   await prisma.auditLog.create({
     data: {
       userId,
+      projectId,
       actorType: "USER",
       action: `UPDATE_${resources[module as keyof typeof resources]}`,
       resource: resources[module as keyof typeof resources],
@@ -270,6 +278,7 @@ export async function DELETE(
   await prisma.auditLog.create({
     data: {
       userId,
+      projectId,
       actorType: "USER",
       action: `DELETE_${resources[module as keyof typeof resources]}`,
       resource: resources[module as keyof typeof resources],

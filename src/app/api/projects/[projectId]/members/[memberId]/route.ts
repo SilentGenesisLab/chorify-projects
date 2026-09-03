@@ -27,7 +27,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   if (await isRateLimited(context.userId, "UPDATE_PROJECT_MEMBER", 20)) return NextResponse.json({ error: "操作过于频繁，请稍后再试" }, { status: 429 });
   const member = await prisma.$transaction(async (tx) => {
     const updated = await tx.projectMember.update({ where: { id: memberId }, data: { role: input.data.role, responsibility: input.data.responsibility === undefined ? context.target.responsibility : input.data.responsibility || null } });
-    await tx.auditLog.create({ data: { userId: context.userId, actorType: "USER", action: "UPDATE_PROJECT_MEMBER", resource: "PROJECT_MEMBER", resourceId: memberId, channel: "WEB", metadata: { projectId, fromRole: context.target.role, toRole: input.data.role } } });
+    await tx.auditLog.create({ data: { userId: context.userId, projectId, actorType: "USER", action: "UPDATE_PROJECT_MEMBER", resource: "PROJECT_MEMBER", resourceId: memberId, channel: "WEB", metadata: { projectId, fromRole: context.target.role, toRole: input.data.role } } });
     return updated;
   });
   return NextResponse.json({ member });
@@ -41,7 +41,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   if (await isRateLimited(context.userId, "REMOVE_PROJECT_MEMBER", 20)) return NextResponse.json({ error: "操作过于频繁，请稍后再试" }, { status: 429 });
   await prisma.$transaction(async (tx) => {
     await tx.projectMember.delete({ where: { id: memberId } });
-    await tx.auditLog.create({ data: { userId: context.userId, actorType: "USER", action: "REMOVE_PROJECT_MEMBER", resource: "PROJECT_MEMBER", resourceId: memberId, channel: "WEB", metadata: { projectId, removedUserId: context.target.userId, role: context.target.role } } });
+    await tx.auditLog.create({ data: { userId: context.userId, projectId, actorType: "USER", action: "REMOVE_PROJECT_MEMBER", resource: "PROJECT_MEMBER", resourceId: memberId, channel: "WEB", metadata: { projectId, removedUserId: context.target.userId, role: context.target.role } } });
   });
   return NextResponse.json({ ok: true });
 }

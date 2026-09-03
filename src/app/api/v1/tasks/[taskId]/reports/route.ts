@@ -14,7 +14,7 @@ async function submit(request: Request, { params }: { params: Promise<{ taskId: 
   if (!userId || !task || task.assigneeId !== userId) return NextResponse.json({ error: "只能提交自己的任务" }, { status: 403 });
   const transitionError = validateTaskStatusTransition(task, userId, false, "PENDING_ACCEPTANCE");
   if (transitionError) return NextResponse.json({ error: transitionError.error }, { status: transitionError.status });
-  const report = await prisma.$transaction(async (tx) => { const created = await tx.workReport.create({ data: { taskId, authorId: userId, ...parsed.data } }); await tx.task.update({ where: { id: taskId }, data: { status: "PENDING_ACCEPTANCE" } }); await tx.auditLog.create({ data: { userId, actorType: "USER", action: "SUBMIT_REPORT", resource: "TASK", resourceId: taskId, channel: "WEB", metadata: { projectId: task.projectId, result: "SUCCESS" } } }); return created; });
+  const report = await prisma.$transaction(async (tx) => { const created = await tx.workReport.create({ data: { taskId, authorId: userId, ...parsed.data } }); await tx.task.update({ where: { id: taskId }, data: { status: "PENDING_ACCEPTANCE" } }); await tx.auditLog.create({ data: { userId, projectId: task.projectId, actorType: "USER", action: "SUBMIT_REPORT", resource: "TASK", resourceId: taskId, channel: "WEB", metadata: { projectId: task.projectId, result: "SUCCESS" } } }); return created; });
   return NextResponse.json({ report }, { status: 201 });
 }
 export const POST = apiRoute("task:report", submit, { idempotent: true });

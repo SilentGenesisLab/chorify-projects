@@ -30,6 +30,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     await tx.auditLog.create({
       data: {
         userId,
+        projectId,
         actorType: "USER",
         action: "TRANSFER_PROJECT_TO_TEAM",
         resource: "PROJECT",

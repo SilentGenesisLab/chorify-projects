@@ -4,9 +4,10 @@ import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { ProjectWorkspace } from "@/components/project-workspace";
 import { ProjectOverview } from "@/components/project-overview";
+import { ProjectActivity } from "@/components/project-activity";
 import { FileManager } from "@/components/file-manager";
 import { SelectField } from "@/components/ui/select-field";
-import { Bug, AlertTriangle, Check, CheckCircle2, ChevronRight, FileText, Folder, FolderKanban, LayoutDashboard, ListChecks, LoaderCircle, MoreHorizontal, Pencil, Plus, Rocket, Search, Target, Trash2, UserPlus, Users, X } from "lucide-react";
+import { Bug, AlertTriangle, Check, CheckCircle2, ChevronRight, FileClock, FileText, Folder, FolderKanban, LayoutDashboard, ListChecks, LoaderCircle, MoreHorizontal, Pencil, Plus, Rocket, Search, Target, Trash2, UserPlus, Users, X } from "lucide-react";
 
 type Project = {
   id: string;
@@ -25,9 +26,10 @@ type Project = {
   taskCount: number;
 };
 type Team = { id: string; name: string };
-type Section = "overview" | "team" | "requirements" | "tasks" | "bugs" | "versions" | "files";
+type Section = "overview" | "activity" | "team" | "requirements" | "tasks" | "bugs" | "versions" | "files";
 const sections: { id: Section; label: string; icon: typeof LayoutDashboard }[] = [
   { id: "overview", label: "概览", icon: LayoutDashboard },
+  { id: "activity", label: "项目动态", icon: FileClock },
   { id: "team", label: "团队管理", icon: Users },
   { id: "requirements", label: "需求管理", icon: Target },
   { id: "tasks", label: "任务管理", icon: ListChecks },
@@ -281,6 +283,7 @@ function ProjectSection({ project, section }: { project: Project; section: Secti
   if (section === "team") return <ProjectTeam project={project} />;
   if (section === "requirements" || section === "tasks" || section === "bugs" || section === "versions") return <ProjectWorkspace projectId={project.id} module={section} />;
   if (section === "overview") return <ProjectOverview projectId={project.id} />;
+  if (section === "activity") return <ProjectActivity projectId={project.id} />;
   const config = {
     requirements: {
       title: "需求管理",

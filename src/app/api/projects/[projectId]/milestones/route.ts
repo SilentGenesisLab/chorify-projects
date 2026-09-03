@@ -42,6 +42,7 @@ export async function POST(
     await tx.auditLog.create({
       data: {
         userId,
+        projectId,
         actorType: "USER",
         action: "CREATE_MILESTONE",
         resource: "MILESTONE",

@@ -49,6 +49,7 @@ export async function PATCH(
     await tx.auditLog.create({
       data: {
         userId,
+        projectId,
         actorType: "USER",
         action: "UPDATE_PROJECT_PROFILE",
         resource: "PROJECT",
