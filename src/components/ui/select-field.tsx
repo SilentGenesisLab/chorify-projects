@@ -27,6 +27,7 @@ export function SelectField({
   size = "default",
   className = "",
   ariaLabel,
+  label,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -36,6 +37,7 @@ export function SelectField({
   size?: "default" | "small";
   className?: string;
   ariaLabel?: string;
+  label?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -116,7 +118,7 @@ export function SelectField({
     <div ref={rootRef} className={`relative ${className}`}>
       <button
         type="button"
-        aria-label={ariaLabel}
+        aria-label={ariaLabel || label}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? listboxId : undefined}

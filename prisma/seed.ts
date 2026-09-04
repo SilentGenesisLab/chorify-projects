@@ -18,6 +18,15 @@ async function main() {
   await prisma.bug.deleteMany();
   await prisma.task.deleteMany();
   await prisma.requirement.deleteMany();
+  await prisma.environmentHealthCheck.deleteMany();
+  await prisma.deploymentApproval.deleteMany();
+  await prisma.deploymentStep.deleteMany();
+  await prisma.buildArtifact.deleteMany();
+  await prisma.deploymentRun.deleteMany();
+  await prisma.versionComponent.deleteMany();
+  await prisma.deploymentEnvironment.deleteMany();
+  await prisma.deployableService.deleteMany();
+  await prisma.projectRepository.deleteMany();
   await prisma.release.deleteMany();
   await prisma.version.deleteMany();
   await prisma.fileAsset.deleteMany();
@@ -66,6 +75,10 @@ async function main() {
     ]}
   }});
   const version = await prisma.version.create({ data: { projectId: project.id, name: "V0.9", goal: "完成协作内测闭环", description: "## V0.9 范围\n\n完成任务提交、验收与版本发布的核心闭环。", ownerId: lin.id, status: VersionStatus.DEVELOPING, plannedAt: new Date("2026-09-05") } });
+  const repository = await prisma.projectRepository.create({ data: { projectId: project.id, installationId: "demo", owner: "SilentGenesisLab", name: "chorify-projects", fullName: "SilentGenesisLab/chorify-projects", defaultBranch: "uat" } });
+  const service = await prisma.deployableService.create({ data: { projectId: project.id, repositoryId: repository.id, name: "Web 应用", slug: "web", healthPath: "/api/health" } });
+  await prisma.deploymentEnvironment.create({ data: { projectId: project.id, name: "预发布", slug: "staging", kind: "STAGING", url: "https://aipms.sligenai.cn", githubEnvironment: "staging", healthPath: "/api/health" } });
+  await prisma.versionComponent.create({ data: { versionId: version.id, serviceId: service.id, commitSha: "6068e067e8cdb2a00f20e50ebaabcaf76ce4770a", branch: "uat" } });
   const requirement = await prisma.requirement.create({ data: { code: "REQ-12", projectId: project.id, title: "任务提交与验收闭环", description: "成员可以提交结构化工作汇报并由指定验收人处理", acceptanceCriteria: "提交人与验收人分离，完整保留操作记录", priority: Priority.HIGH, status: "IN_PROGRESS", requesterId: chen.id, targetVersionId: version.id } });
   await prisma.requirementParticipant.createMany({ data: [{ requirementId: requirement.id, userId: lin.id }, { requirementId: requirement.id, userId: zhou.id }] });
   await prisma.versionParticipant.createMany({ data: [{ versionId: version.id, userId: chen.id }, { versionId: version.id, userId: su.id }] });

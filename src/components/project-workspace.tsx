@@ -16,6 +16,7 @@ import {
   X,
 } from "lucide-react";
 import { SelectField } from "@/components/ui/select-field";
+import { DeploymentCenter } from "@/components/deployment-center";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -32,7 +33,6 @@ type Item = Record<string, unknown> & {
   createdAt?: string;
   plannedAt?: string | null;
 };
-type Lookup = { id: string; name?: string; title?: string; code?: string };
 type Data = {
   currentUserId: string;
   requirements: Item[];
@@ -215,6 +215,7 @@ export function ProjectWorkspace({
     [assigneeId, setAssigneeId] = useState("ALL"),
     [submittedDate, setSubmittedDate] = useState(""),
     [dueDate, setDueDate] = useState(""),
+    [deploymentRefresh, setDeploymentRefresh] = useState(0),
     [dialog, setDialog] = useState<{
       module: Module;
       item: Item | null;
@@ -254,6 +255,31 @@ export function ProjectWorkspace({
       ),
     [active, assigneeId, dueDate, items, query, status, submittedDate],
   );
+  if (active === "versions")
+    return (
+      <>
+        <DeploymentCenter
+          projectId={projectId}
+          refreshKey={deploymentRefresh}
+          onNewVersion={() => setDialog({ module: "versions", item: null })}
+          onEditVersion={(version) => setDialog({ module: "versions", item: version as unknown as Item })}
+        />
+        {dialog && (
+          <Editor
+            projectId={projectId}
+            module={dialog.module}
+            item={dialog.item}
+            data={data}
+            onClose={() => setDialog(null)}
+            onSaved={async () => {
+              setDialog(null);
+              await load();
+              setDeploymentRefresh((value) => value + 1);
+            }}
+          />
+        )}
+      </>
+    );
   async function remove(item: Item) {
     if (
       !confirm(`确定删除“${item.title || item.name}”？此操作会写入审计日志。`)
@@ -290,19 +316,6 @@ export function ProjectWorkspace({
           </button>
         )}
       </div>
-      {active === "versions" && (
-        <div className="flex gap-2">
-          <button className="rounded-lg bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700">
-            版本管理
-          </button>
-          <button
-            onClick={() => setDialog({ module: "releases", item: null })}
-            className="rounded-lg px-3 py-2 text-sm text-slate-500 hover:bg-white"
-          >
-            新建发布记录
-          </button>
-        </div>
-      )}
       {error && (
         <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
           {error}
@@ -396,22 +409,6 @@ export function ProjectWorkspace({
           </div>
         )}
       </section>
-      {active === "versions" && (
-        <ReleaseList
-          data={data}
-          canWrite={data.permissions.canWrite}
-          canDelete={data.permissions.canDelete}
-          onEdit={(item) => setDialog({ module: "releases", item })}
-          onDelete={async (item) => {
-            if (!confirm("确定删除该发布记录？")) return;
-            await fetch(
-              `/api/projects/${projectId}/workspace/releases/${item.id}`,
-              { method: "DELETE" },
-            );
-            await load();
-          }}
-        />
-      )}
       {dialog && (
         <Editor
           projectId={projectId}
@@ -426,70 +423,6 @@ export function ProjectWorkspace({
         />
       )}
     </div>
-  );
-}
-
-function ReleaseList({
-  data,
-  canWrite,
-  canDelete,
-  onEdit,
-  onDelete,
-}: {
-  data: Data;
-  canWrite: boolean;
-  canDelete: boolean;
-  onEdit: (x: Item) => void;
-  onDelete: (x: Item) => void;
-}) {
-  return (
-    <section className="card overflow-hidden">
-      <div className="border-b border-slate-100 px-5 py-4">
-        <h4 className="font-semibold">发布记录</h4>
-        <p className="mt-1 text-xs text-slate-400">
-          这里只记录发布过程，不执行真实部署
-        </p>
-      </div>
-      {data.releases.length ? (
-        <div className="divide-y divide-slate-100">
-          {data.releases.map((x) => (
-            <div key={x.id} className="flex items-center gap-3 p-4">
-              <FileCheck2 size={18} className="text-blue-600" />
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium">
-                  {String(x.build)} · {String(x.environment)}
-                </p>
-                <p className="mt-1 text-xs text-slate-400">
-                  {String((x.version as Lookup)?.name || "")} ·{" "}
-                  {fmt(x.releasedAt || x.createdAt)}
-                </p>
-              </div>
-              <Badge value={x.status} />
-              {canWrite && (
-                <button
-                  onClick={() => onEdit(x)}
-                  className="p-2 text-slate-400"
-                >
-                  <Pencil size={16} />
-                </button>
-              )}
-              {canDelete && (
-                <button
-                  onClick={() => onDelete(x)}
-                  className="p-2 text-slate-400"
-                >
-                  <Trash2 size={16} />
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="p-8 text-center text-sm text-slate-400">
-          暂无发布记录
-        </div>
-      )}
-    </section>
   );
 }
 

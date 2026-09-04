@@ -119,54 +119,131 @@ enum ReleaseStatus {
   ROLLED_BACK
 }
 
+enum RepositoryConnectionStatus {
+  ACTIVE
+  DISCONNECTED
+  ERROR
+}
+
+enum DeployableServiceKind {
+  WEB
+  API
+  WORKER
+}
+
+enum DeploymentEnvironmentKind {
+  STAGING
+  PRODUCTION
+}
+
+enum DeploymentStrategy {
+  BLUE_GREEN
+}
+
+enum EnvironmentHealthStatus {
+  UNKNOWN
+  HEALTHY
+  DEGRADED
+  DOWN
+}
+
+enum BuildArtifactStatus {
+  BUILDING
+  READY
+  FAILED
+}
+
+enum DeploymentRunType {
+  DEPLOY
+  ROLLBACK
+  AUTO_ROLLBACK
+}
+
+enum DeploymentRunStatus {
+  QUEUED
+  WAITING_APPROVAL
+  DISPATCHED
+  BUILDING
+  DEPLOYING
+  VERIFYING
+  SUCCEEDED
+  FAILED
+  ROLLED_BACK
+  CANCELLED
+}
+
+enum DeploymentStepStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+  SKIPPED
+}
+
+enum DeploymentApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
+enum MigrationRisk {
+  NONE
+  BACKWARD_COMPATIBLE
+  BREAKING
+}
+
 model User {
-  id                        String                   @id @default(cuid())
-  name                      String
-  phone                     String                   @unique
-  passwordHash              String
-  avatarColor               String                   @default("#376ce7")
-  avatarUrl                 String?
-  systemRole                SystemRole               @default(MEMBER)
-  projectMembers            ProjectMember[]
-  teamMembers               TeamMember[]
-  createdInvites            TeamInvite[]             @relation("TeamInviteCreator")
-  assignedTasks             Task[]                   @relation("TaskAssignee")
-  coordinatedTasks          Task[]                   @relation("TaskCoordinator")
-  acceptedTasks             Task[]                   @relation("TaskAcceptor")
-  createdTasks              Task[]                   @relation("TaskCreator")
-  reports                   WorkReport[]
-  acceptances               Acceptance[]
-  apiTokens                 ApiToken[]
-  apiIdempotencyRecords     ApiIdempotencyRecord[]
-  auditLogs                 AuditLog[]
-  feedbacks                 Feedback[]
-  createdFolders            FileFolder[]             @relation("FolderCreator")
-  createdFiles              FileAsset[]              @relation("FileCreator")
-  uploadedVersions          FileVersion[]            @relation("VersionUploader")
-  createdShares             FileShare[]              @relation("ShareCreator")
-  uploadSessions            FileUploadSession[]
-  requestedRequirements     Requirement[]            @relation("RequirementRequester")
-  requirementParticipations RequirementParticipant[]
-  ownedVersions             Version[]                @relation("VersionOwner")
-  versionParticipations     VersionParticipant[]
-  ownedMilestones           Milestone[]              @relation("MilestoneOwner")
-  editedProjectReviews      ProjectWeeklyReview[]    @relation("ProjectReviewEditor")
-  ownedProjectRisks         ProjectRisk[]            @relation("ProjectRiskOwner")
-  createdProjectRisks       ProjectRisk[]            @relation("ProjectRiskCreator")
-  decidedStrategyChanges    ProjectStrategyChange[]  @relation("StrategyChangeDecider")
-  createdStrategyChanges    ProjectStrategyChange[]  @relation("StrategyChangeCreator")
-  ownedTeamObjectives       TeamObjective[]          @relation("ObjectiveOwner")
-  ownedKeyResults           TeamKeyResult[]          @relation("KeyResultOwner")
-  keyResultAlignments       TeamKeyResultAlignment[]
-  keyResultCheckIns         TeamKeyResultCheckIn[]
-  sentTeamMessages          TeamMessage[]            @relation("TeamMessageSender")
-  receivedTeamMessages      TeamMessageRecipient[]
-  weeklyReports             TeamWeeklyReport[]
+  id                          String                       @id @default(cuid())
+  name                        String
+  phone                       String                       @unique
+  passwordHash                String
+  avatarColor                 String                       @default("#376ce7")
+  avatarUrl                   String?
+  systemRole                  SystemRole                   @default(MEMBER)
+  projectMembers              ProjectMember[]
+  teamMembers                 TeamMember[]
+  createdInvites              TeamInvite[]                 @relation("TeamInviteCreator")
+  assignedTasks               Task[]                       @relation("TaskAssignee")
+  coordinatedTasks            Task[]                       @relation("TaskCoordinator")
+  acceptedTasks               Task[]                       @relation("TaskAcceptor")
+  createdTasks                Task[]                       @relation("TaskCreator")
+  reports                     WorkReport[]
+  acceptances                 Acceptance[]
+  apiTokens                   ApiToken[]
+  apiIdempotencyRecords       ApiIdempotencyRecord[]
+  auditLogs                   AuditLog[]
+  feedbacks                   Feedback[]
+  createdFolders              FileFolder[]                 @relation("FolderCreator")
+  createdFiles                FileAsset[]                  @relation("FileCreator")
+  uploadedVersions            FileVersion[]                @relation("VersionUploader")
+  createdShares               FileShare[]                  @relation("ShareCreator")
+  uploadSessions              FileUploadSession[]
+  requestedRequirements       Requirement[]                @relation("RequirementRequester")
+  requirementParticipations   RequirementParticipant[]
+  ownedVersions               Version[]                    @relation("VersionOwner")
+  versionParticipations       VersionParticipant[]
+  ownedMilestones             Milestone[]                  @relation("MilestoneOwner")
+  editedProjectReviews        ProjectWeeklyReview[]        @relation("ProjectReviewEditor")
+  ownedProjectRisks           ProjectRisk[]                @relation("ProjectRiskOwner")
+  createdProjectRisks         ProjectRisk[]                @relation("ProjectRiskCreator")
+  decidedStrategyChanges      ProjectStrategyChange[]      @relation("StrategyChangeDecider")
+  createdStrategyChanges      ProjectStrategyChange[]      @relation("StrategyChangeCreator")
+  initiatedDeployments        DeploymentRun[]              @relation("DeploymentInitiator")
+  requestedApprovals          DeploymentApproval[]         @relation("DeploymentApprovalRequester")
+  decidedApprovals            DeploymentApproval[]         @relation("DeploymentApprovalDecider")
+  ownedTeamObjectives         TeamObjective[]              @relation("ObjectiveOwner")
+  ownedKeyResults             TeamKeyResult[]              @relation("KeyResultOwner")
+  keyResultAlignments         TeamKeyResultAlignment[]
+  keyResultCheckIns           TeamKeyResultCheckIn[]
+  sentTeamMessages            TeamMessage[]                @relation("TeamMessageSender")
+  receivedTeamMessages        TeamMessageRecipient[]
+  weeklyReports               TeamWeeklyReport[]
   usageCollectorRegistrations UsageCollectorRegistration[]
-  usageCollectorDevices     UsageCollectorDevice[]
-  tokenUsageDaily           TokenUsageDaily[]
-  createdAt                 DateTime                 @default(now())
-  updatedAt                 DateTime                 @updatedAt
+  usageCollectorDevices       UsageCollectorDevice[]
+  tokenUsageDaily             TokenUsageDaily[]
+  createdAt                   DateTime                     @default(now())
+  updatedAt                   DateTime                     @updatedAt
 }
 
 model Team {
@@ -349,33 +426,37 @@ model SmsCode {
 }
 
 model Project {
-  id              String                  @id @default(cuid())
-  teamId          String?
-  code            String                  @unique
-  name            String
-  description     String
-  background      String                  @default("")
-  status          String                  @default("ACTIVE")
-  startDate       DateTime?
-  endDate         DateTime?
-  members         ProjectMember[]
-  requirements    Requirement[]
-  tasks           Task[]
-  bugs            Bug[]
-  versions        Version[]
-  milestones      Milestone[]
-  weeklyReviews   ProjectWeeklyReview[]
-  risks           ProjectRisk[]
-  strategyChanges ProjectStrategyChange[]
-  auditLogs       AuditLog[]
-  releases        Release[]
-  files           FileAsset[]
-  folders         FileFolder[]
-  fileShares      FileShare[]
-  fileUploads     FileUploadSession[]
-  team            Team?                   @relation(fields: [teamId], references: [id], onDelete: Restrict)
-  createdAt       DateTime                @default(now())
-  updatedAt       DateTime                @updatedAt
+  id                     String                  @id @default(cuid())
+  teamId                 String?
+  code                   String                  @unique
+  name                   String
+  description            String
+  background             String                  @default("")
+  status                 String                  @default("ACTIVE")
+  startDate              DateTime?
+  endDate                DateTime?
+  members                ProjectMember[]
+  requirements           Requirement[]
+  tasks                  Task[]
+  bugs                   Bug[]
+  versions               Version[]
+  milestones             Milestone[]
+  weeklyReviews          ProjectWeeklyReview[]
+  risks                  ProjectRisk[]
+  strategyChanges        ProjectStrategyChange[]
+  auditLogs              AuditLog[]
+  releases               Release[]
+  repositories           ProjectRepository[]
+  deployableServices     DeployableService[]
+  deploymentEnvironments DeploymentEnvironment[]
+  deploymentRuns         DeploymentRun[]
+  files                  FileAsset[]
+  folders                FileFolder[]
+  fileShares             FileShare[]
+  fileUploads            FileUploadSession[]
+  team                   Team?                   @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
 
   @@index([teamId])
 }
@@ -599,25 +680,27 @@ model Bug {
 }
 
 model Version {
-  id           String               @id @default(cuid())
-  projectId    String
-  name         String
-  goal         String
-  description  String               @default("")
-  ownerId      String?
-  status       VersionStatus        @default(PLANNING)
-  plannedAt    DateTime?
-  project      Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  owner        User?                @relation("VersionOwner", fields: [ownerId], references: [id])
-  participants VersionParticipant[]
-  requirements Requirement[]
-  tasks        Task[]
-  foundBugs    Bug[]                @relation("FoundVersion")
-  fixedBugs    Bug[]                @relation("FixedVersion")
-  releases     Release[]
-  milestones   Milestone[]
-  createdAt    DateTime             @default(now())
-  updatedAt    DateTime             @updatedAt
+  id             String               @id @default(cuid())
+  projectId      String
+  name           String
+  goal           String
+  description    String               @default("")
+  ownerId        String?
+  status         VersionStatus        @default(PLANNING)
+  plannedAt      DateTime?
+  project        Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  owner          User?                @relation("VersionOwner", fields: [ownerId], references: [id])
+  participants   VersionParticipant[]
+  requirements   Requirement[]
+  tasks          Task[]
+  foundBugs      Bug[]                @relation("FoundVersion")
+  fixedBugs      Bug[]                @relation("FixedVersion")
+  releases       Release[]
+  components     VersionComponent[]
+  deploymentRuns DeploymentRun[]
+  milestones     Milestone[]
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
 
   @@unique([projectId, name])
 }
@@ -720,18 +803,222 @@ model ProjectStrategyChange {
 }
 
 model Release {
-  id           String        @id @default(cuid())
-  projectId    String
-  versionId    String
-  build        String
-  environment  String
-  notes        String
-  rollbackPlan String
-  status       ReleaseStatus @default(PLANNED)
-  releasedAt   DateTime?
-  project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  version      Version       @relation(fields: [versionId], references: [id])
-  createdAt    DateTime      @default(now())
+  id              String         @id @default(cuid())
+  projectId       String
+  versionId       String
+  build           String
+  environment     String
+  notes           String
+  rollbackPlan    String
+  status          ReleaseStatus  @default(PLANNED)
+  releasedAt      DateTime?
+  deploymentRunId String?        @unique
+  isLegacy        Boolean        @default(true)
+  commitSummary   Json?
+  imageSummary    Json?
+  project         Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  version         Version        @relation(fields: [versionId], references: [id])
+  deploymentRun   DeploymentRun? @relation(fields: [deploymentRunId], references: [id], onDelete: SetNull)
+  createdAt       DateTime       @default(now())
+}
+
+model ProjectRepository {
+  id             String                     @id @default(cuid())
+  projectId      String
+  installationId String
+  owner          String
+  name           String
+  fullName       String
+  defaultBranch  String                     @default("main")
+  workflowPath   String                     @default("chorify-deploy.yml")
+  status         RepositoryConnectionStatus @default(ACTIVE)
+  lastSyncedAt   DateTime?
+  project        Project                    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  services       DeployableService[]
+  createdAt      DateTime                   @default(now())
+  updatedAt      DateTime                   @updatedAt
+
+  @@unique([projectId, fullName])
+  @@index([installationId])
+}
+
+model DeployableService {
+  id                String                @id @default(cuid())
+  projectId         String
+  repositoryId      String
+  name              String
+  slug              String
+  kind              DeployableServiceKind @default(WEB)
+  dockerfilePath    String                @default("Dockerfile")
+  buildContext      String                @default(".")
+  healthPath        String                @default("/api/health")
+  internalPort      Int                   @default(3000)
+  enabled           Boolean               @default(true)
+  project           Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  repository        ProjectRepository     @relation(fields: [repositoryId], references: [id], onDelete: Restrict)
+  versionComponents VersionComponent[]
+  artifacts         BuildArtifact[]
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+
+  @@unique([projectId, slug])
+  @@index([repositoryId])
+}
+
+model DeploymentEnvironment {
+  id                     String                    @id @default(cuid())
+  projectId              String
+  name                   String
+  slug                   String
+  kind                   DeploymentEnvironmentKind
+  url                    String
+  githubEnvironment      String
+  strategy               DeploymentStrategy        @default(BLUE_GREEN)
+  healthPath             String                    @default("/api/health")
+  activeSlot             String?
+  currentDeploymentRunId String?
+  healthStatus           EnvironmentHealthStatus   @default(UNKNOWN)
+  consecutiveFailures    Int                       @default(0)
+  lastCheckedAt          DateTime?
+  enabled                Boolean                   @default(true)
+  project                Project                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  deploymentRuns         DeploymentRun[]
+  healthChecks           EnvironmentHealthCheck[]
+  createdAt              DateTime                  @default(now())
+  updatedAt              DateTime                  @updatedAt
+
+  @@unique([projectId, slug])
+  @@index([projectId, kind])
+}
+
+model VersionComponent {
+  id        String            @id @default(cuid())
+  versionId String
+  serviceId String
+  commitSha String
+  branch    String?
+  version   Version           @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  service   DeployableService @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  artifacts BuildArtifact[]
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  @@unique([versionId, serviceId])
+  @@index([serviceId, commitSha])
+}
+
+model BuildArtifact {
+  id                 String              @id @default(cuid())
+  projectId          String
+  versionComponentId String
+  serviceId          String
+  deploymentRunId    String
+  commitSha          String
+  imageRef           String
+  imageDigest        String?
+  status             BuildArtifactStatus @default(BUILDING)
+  testsPassed        Boolean?
+  manifest           Json?
+  builtAt            DateTime?
+  versionComponent   VersionComponent    @relation(fields: [versionComponentId], references: [id], onDelete: Cascade)
+  service            DeployableService   @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  deploymentRun      DeploymentRun       @relation(fields: [deploymentRunId], references: [id], onDelete: Cascade)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  @@unique([deploymentRunId, serviceId])
+  @@index([projectId, createdAt])
+  @@index([deploymentRunId])
+}
+
+model DeploymentRun {
+  id               String                   @id @default(cuid())
+  projectId        String
+  versionId        String
+  environmentId    String
+  initiatedById    String
+  rollbackOfId     String?
+  type             DeploymentRunType        @default(DEPLOY)
+  status           DeploymentRunStatus      @default(QUEUED)
+  lockKey          String?                  @unique
+  manifestHash     String
+  migrationRisk    MigrationRisk            @default(NONE)
+  requiresApproval Boolean                  @default(false)
+  githubRunId      String?
+  githubRunUrl     String?
+  failureReason    String?
+  activeSlot       String?
+  previousSlot     String?
+  queuedAt         DateTime                 @default(now())
+  startedAt        DateTime?
+  finishedAt       DateTime?
+  project          Project                  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  version          Version                  @relation(fields: [versionId], references: [id], onDelete: Restrict)
+  environment      DeploymentEnvironment    @relation(fields: [environmentId], references: [id], onDelete: Restrict)
+  initiatedBy      User                     @relation("DeploymentInitiator", fields: [initiatedById], references: [id], onDelete: Restrict)
+  rollbackOf       DeploymentRun?           @relation("DeploymentRollback", fields: [rollbackOfId], references: [id], onDelete: SetNull)
+  rollbacks        DeploymentRun[]          @relation("DeploymentRollback")
+  steps            DeploymentStep[]
+  approvals        DeploymentApproval[]
+  artifacts        BuildArtifact[]
+  healthChecks     EnvironmentHealthCheck[]
+  release          Release?
+
+  @@index([projectId, queuedAt])
+  @@index([environmentId, status])
+  @@index([githubRunId])
+}
+
+model DeploymentStep {
+  id              String               @id @default(cuid())
+  deploymentRunId String
+  key             String
+  name            String
+  sortOrder       Int
+  status          DeploymentStepStatus @default(PENDING)
+  logsUrl         String?
+  output          Json?
+  startedAt       DateTime?
+  finishedAt      DateTime?
+  deploymentRun   DeploymentRun        @relation(fields: [deploymentRunId], references: [id], onDelete: Cascade)
+
+  @@unique([deploymentRunId, key])
+  @@index([deploymentRunId, sortOrder])
+}
+
+model DeploymentApproval {
+  id              String                   @id @default(cuid())
+  deploymentRunId String
+  requestedById   String
+  decidedById     String?
+  status          DeploymentApprovalStatus @default(PENDING)
+  manifestHash    String
+  comment         String                   @default("")
+  requestedAt     DateTime                 @default(now())
+  decidedAt       DateTime?
+  expiresAt       DateTime
+  deploymentRun   DeploymentRun            @relation(fields: [deploymentRunId], references: [id], onDelete: Cascade)
+  requestedBy     User                     @relation("DeploymentApprovalRequester", fields: [requestedById], references: [id], onDelete: Restrict)
+  decidedBy       User?                    @relation("DeploymentApprovalDecider", fields: [decidedById], references: [id], onDelete: Restrict)
+
+  @@index([deploymentRunId, status])
+  @@index([decidedById, decidedAt])
+}
+
+model EnvironmentHealthCheck {
+  id              String                  @id @default(cuid())
+  environmentId   String
+  deploymentRunId String?
+  status          EnvironmentHealthStatus
+  statusCode      Int?
+  latencyMs       Int?
+  error           String?
+  checkedAt       DateTime                @default(now())
+  environment     DeploymentEnvironment   @relation(fields: [environmentId], references: [id], onDelete: Cascade)
+  deploymentRun   DeploymentRun?          @relation(fields: [deploymentRunId], references: [id], onDelete: SetNull)
+
+  @@index([environmentId, checkedAt])
+  @@index([deploymentRunId])
 }
 
 model FileFolder {

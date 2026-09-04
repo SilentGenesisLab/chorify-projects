@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT=/home/donxu/webServer/aipmf
+STATE_DIR="$ROOT/deploy/state"
+mkdir -p "$STATE_DIR"
+
+if [[ $# -eq 1 ]]; then
+  read -r -a ARGS <<< "$1"
+  set -- "${ARGS[@]}"
+fi
+
+ACTION="${1:-}"
+if [[ "$ACTION" == "registry-login" ]]; then
+  [[ $# -eq 3 && "$2" == "ghcr.io" && "$3" =~ ^[A-Za-z0-9_-]+$ ]] || { echo "invalid registry login" >&2; exit 2; }
+  exec docker login ghcr.io -u "$3" --password-stdin
+fi
+
+[[ "$ACTION" == "deploy" && $# -eq 4 ]] || { echo "usage: deploy <service> <image@digest> <run-id>" >&2; exit 2; }
+SERVICE="$2"
+IMAGE_REF="$3"
+RUN_ID="$4"
+[[ "$SERVICE" =~ ^[a-z0-9][a-z0-9-]{0,49}$ ]] || { echo "invalid service" >&2; exit 2; }
+[[ "$IMAGE_REF" =~ ^ghcr\.io/[a-z0-9._/-]+(:[a-f0-9]{40})?@sha256:[a-f0-9]{64}$ ]] || { echo "image must use an immutable GHCR digest" >&2; exit 2; }
+[[ "$RUN_ID" =~ ^[a-z0-9]+$ ]] || { echo "invalid run id" >&2; exit 2; }
+CONFIG="$ROOT/deploy/services/$SERVICE.env"
+[[ -r "$CONFIG" ]] || { echo "unknown service" >&2; exit 2; }
+source "$CONFIG"
+
+CURRENT="blue"
+[[ -f "$STATE_DIR/$SERVICE.active" ]] && CURRENT="$(<"$STATE_DIR/$SERVICE.active")"
+[[ "$CURRENT" == "blue" || "$CURRENT" == "green" ]] || CURRENT="blue"
+if [[ "$CURRENT" == "blue" ]]; then TARGET="green"; HOST_PORT="$GREEN_PORT"; else TARGET="blue"; HOST_PORT="$BLUE_PORT"; fi
+PROJECT="aipmf-$SERVICE-$TARGET"
+
+cd "$ROOT"
+export IMAGE_REF HOST_PORT
+docker compose -p "$PROJECT" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" run --rm migrate
+docker compose -p "$PROJECT" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d app
+
+healthy=false
+for _ in $(seq 1 30); do
+  if curl -fsS --max-time 3 "http://127.0.0.1:$HOST_PORT$HEALTH_PATH" >/dev/null; then healthy=true; break; fi
+  sleep 2
+done
+if [[ "$healthy" != true ]]; then
+  docker compose -p "$PROJECT" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" down
+  echo "inactive slot failed health check" >&2
+  exit 20
+fi
+
+write_upstream() {
+  local port="$1" tmp backup
+  tmp="$(mktemp /etc/nginx/snippets/aipms-upstream.XXXXXX)"
+  backup="$(mktemp /etc/nginx/snippets/aipms-upstream.backup.XXXXXX)"
+  cp "$NGINX_UPSTREAM" "$backup"
+  printf 'upstream aipms_app { server 127.0.0.1:%s; keepalive 32; }\n' "$port" > "$tmp"
+  mv "$tmp" "$NGINX_UPSTREAM"
+  if ! nginx -t >/dev/null; then
+    mv "$backup" "$NGINX_UPSTREAM"
+    return 1
+  fi
+  rm -f "$backup"
+  systemctl reload nginx
+}
+
+write_upstream "$HOST_PORT"
+START_MS="$(date +%s%3N)"
+failures=0
+for _ in $(seq 1 12); do
+  sleep 10
+  if ! curl -fsS --max-time 4 "http://127.0.0.1:$HOST_PORT$HEALTH_PATH" >/dev/null; then
+    failures=$((failures + 1))
+  else
+    failures=0
+  fi
+  if [[ $failures -ge 3 ]]; then
+    if [[ "$CURRENT" == "blue" ]]; then PREVIOUS_PORT="$BLUE_PORT"; else PREVIOUS_PORT="$GREEN_PORT"; fi
+    write_upstream "$PREVIOUS_PORT"
+    docker compose -p "$PROJECT" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" down
+    printf '{"activeSlot":"%s","previousSlot":"%s","latencyMs":0,"rolledBack":true}\n' "$CURRENT" "$TARGET"
+    exit 0
+  fi
+done
+END_MS="$(date +%s%3N)"
+printf '%s\n' "$TARGET" > "$STATE_DIR/$SERVICE.active"
+printf '{"activeSlot":"%s","previousSlot":"%s","latencyMs":%s,"rolledBack":false}\n' "$TARGET" "$CURRENT" "$((END_MS - START_MS))"

@@ -1,0 +1,36 @@
+services:
+  migrate:
+    image: ${IMAGE_REF}
+    env_file:
+      - ../.env.staging
+    environment:
+      DATABASE_URL: postgresql://chorify:${POSTGRES_PASSWORD}@postgres:5432/chorify_projects?schema=public
+    command: ["npx", "prisma", "migrate", "deploy"]
+    networks: [aipmf]
+    restart: "no"
+
+  app:
+    image: ${IMAGE_REF}
+    restart: unless-stopped
+    env_file:
+      - ../.env.staging
+    environment:
+      DATABASE_URL: postgresql://chorify:${POSTGRES_PASSWORD}@postgres:5432/chorify_projects?schema=public
+      APP_URL: ${APP_URL:-https://aipms.sligenai.cn}
+      S3_ENDPOINT: http://minio:9000
+      S3_PUBLIC_ENDPOINT: ${APP_URL:-https://aipms.sligenai.cn}
+      S3_REGION: us-east-1
+      S3_BUCKET: ${S3_BUCKET:-aipmf-files}
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      STORAGE_CAPACITY_PATH: /storage-capacity
+    volumes:
+      - ${MINIO_DATA_DIR:-/home/donxu/webServer/data/aipmf-minio}:/storage-capacity:ro
+    ports:
+      - "127.0.0.1:${HOST_PORT}:3000"
+    networks: [aipmf]
+
+networks:
+  aipmf:
+    external: true
+    name: deploy_default

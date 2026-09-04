@@ -1,0 +1,185 @@
+name: Chorify CI/CD
+run-name: chorify-${{ inputs.deployment_run_id }}-${{ inputs.service_slug }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      deployment_run_id: { description: Deployment run ID, required: true, type: string }
+      environment: { description: GitHub Environment, required: true, type: string }
+      commit_sha: { description: Exact commit SHA, required: true, type: string }
+      previous_commit_sha: { description: Previous healthy commit SHA, required: false, type: string }
+      image_name: { description: GHCR image name, required: true, type: string }
+      image_ref: { description: Existing immutable image for rollback, required: false, type: string }
+      service_id: { description: Deployable service ID, required: true, type: string }
+      service_slug: { description: Deployable service slug, required: true, type: string }
+      dockerfile_path: { description: Dockerfile path, required: true, type: string }
+      build_context: { description: Docker build context, required: true, type: string }
+      mode: { description: deploy or rollback, required: true, default: deploy, type: string }
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: chorify-${{ inputs.environment }}-${{ inputs.service_slug }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    timeout-minutes: 30
+    env:
+      RUN_ID: ${{ inputs.deployment_run_id }}
+      SERVICE_ID: ${{ inputs.service_id }}
+      SERVICE_SLUG: ${{ inputs.service_slug }}
+      CALLBACK_URL: ${{ secrets.CHORIFY_CALLBACK_URL }}
+      CALLBACK_SECRET: ${{ secrets.CHORIFY_DEPLOY_CALLBACK_SECRET }}
+    steps:
+      - name: Notify pipeline start
+        shell: bash
+        run: |
+          curl -fsS -X POST "$CALLBACK_URL/api/internal/deployments/$RUN_ID/events" \
+            -H "Content-Type: application/json" -H "X-Chorify-Deploy-Secret: $CALLBACK_SECRET" \
+            -d "{\"status\":\"BUILDING\",\"step\":\"checkout\",\"stepStatus\":\"RUNNING\",\"serviceId\":\"$SERVICE_ID\",\"githubRunId\":\"$GITHUB_RUN_ID\",\"githubRunUrl\":\"$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID\"}"
+
+      - name: Checkout exact commit
+        if: inputs.mode == 'deploy'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit_sha }}
+          fetch-depth: 0
+
+      - name: Check migration compatibility
+        if: inputs.mode == 'deploy'
+        shell: bash
+        run: |
+          BASE="${{ inputs.previous_commit_sha }}"
+          if [ -n "$BASE" ] && git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            SQL="$(git diff "$BASE" "${{ inputs.commit_sha }}" -- 'prisma/migrations/**/migration.sql')"
+          else
+            SQL="$(git show --format= -- 'prisma/migrations/**/migration.sql')"
+          fi
+          if printf '%s' "$SQL" | grep -Eiq 'DROP[[:space:]]+(COLUMN|TABLE|TYPE)|ALTER[[:space:]]+COLUMN.*SET[[:space:]]+NOT[[:space:]]+NULL|RENAME[[:space:]]+(COLUMN|TABLE)'; then
+            echo "Detected a migration that is not backward compatible. Use a two-phase migration." >&2
+            exit 1
+          fi
+
+      - name: Install dependencies
+        if: inputs.mode == 'deploy'
+        run: npm ci
+
+      - name: Test
+        if: inputs.mode == 'deploy'
+        run: npm test
+
+      - name: Lint and type check
+        if: inputs.mode == 'deploy'
+        run: |
+          npm run lint
+          npx tsc --noEmit
+
+      - name: Build application
+        if: inputs.mode == 'deploy'
+        run: npm run build
+
+      - name: Log in to GHCR
+        if: inputs.mode == 'deploy'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push immutable image
+        id: image
+        if: inputs.mode == 'deploy'
+        shell: bash
+        run: |
+          IMAGE_REF="${{ inputs.image_name }}:${{ inputs.commit_sha }}"
+          docker build -f "${{ inputs.dockerfile_path }}" -t "$IMAGE_REF" "${{ inputs.build_context }}"
+          docker push "$IMAGE_REF"
+          DIGEST="$(docker buildx imagetools inspect "$IMAGE_REF" --format '{{.Manifest.Digest}}')"
+          echo "image_ref=$IMAGE_REF" >> "$GITHUB_OUTPUT"
+          echo "image_digest=$DIGEST" >> "$GITHUB_OUTPUT"
+
+      - name: Select rollback image
+        id: rollback_image
+        if: inputs.mode == 'rollback'
+        shell: bash
+        run: |
+          echo "image_ref=${{ inputs.image_ref }}" >> "$GITHUB_OUTPUT"
+          echo "image_digest=${{ inputs.image_ref }}" | sed 's/.*@//' | sed 's/^/image_digest=/' >> "$GITHUB_OUTPUT"
+
+      - name: Report build checks
+        if: inputs.mode == 'deploy'
+        shell: bash
+        env:
+          IMAGE_REF: ${{ steps.image.outputs.image_ref }}
+          IMAGE_DIGEST: ${{ steps.image.outputs.image_digest }}
+        run: |
+          for STEP in checkout test build; do
+            curl -fsS -X POST "$CALLBACK_URL/api/internal/deployments/$RUN_ID/events" \
+              -H "Content-Type: application/json" -H "X-Chorify-Deploy-Secret: $CALLBACK_SECRET" \
+              -d "$(jq -n --arg status BUILDING --arg step "$STEP" --arg stepStatus SUCCEEDED --arg serviceId "$SERVICE_ID" --arg githubRunId "$GITHUB_RUN_ID" --arg imageRef "$IMAGE_REF" --arg imageDigest "$IMAGE_DIGEST" '{status:$status,step:$step,stepStatus:$stepStatus,serviceId:$serviceId,githubRunId:$githubRunId,imageRef:$imageRef,imageDigest:$imageDigest}')"
+          done
+
+      - name: Prepare restricted SSH connection
+        shell: bash
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+
+      - name: Deploy inactive slot and switch traffic
+        id: deploy
+        shell: bash
+        env:
+          IMAGE_REF: ${{ inputs.mode == 'rollback' && steps.rollback_image.outputs.image_ref || format('{0}@{1}', steps.image.outputs.image_ref, steps.image.outputs.image_digest) }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          curl -fsS -X POST "$CALLBACK_URL/api/internal/deployments/$RUN_ID/events" \
+            -H "Content-Type: application/json" -H "X-Chorify-Deploy-Secret: $CALLBACK_SECRET" \
+            -d "{\"status\":\"DEPLOYING\",\"step\":\"deploy\",\"stepStatus\":\"RUNNING\",\"serviceId\":\"$SERVICE_ID\",\"githubRunId\":\"$GITHUB_RUN_ID\"}"
+          printf '%s' "$GHCR_TOKEN" | ssh "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" "registry-login ghcr.io $GITHUB_ACTOR"
+          RESULT="$(ssh "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" "deploy $SERVICE_SLUG $IMAGE_REF $RUN_ID")"
+          echo "$RESULT"
+          echo "result=$(printf '%s' "$RESULT" | base64 -w0)" >> "$GITHUB_OUTPUT"
+          if printf '%s' "$RESULT" | jq -e '.rolledBack == true' >/dev/null; then
+            SLOT="$(printf '%s' "$RESULT" | jq -r '.activeSlot')"
+            PREVIOUS="$(printf '%s' "$RESULT" | jq -r '.previousSlot')"
+            curl -fsS -X POST "$CALLBACK_URL/api/internal/deployments/$RUN_ID/events" \
+              -H "Content-Type: application/json" -H "X-Chorify-Deploy-Secret: $CALLBACK_SECRET" \
+              -d "$(jq -n --arg status ROLLED_BACK --arg step observe --arg stepStatus FAILED --arg serviceId "$SERVICE_ID" --arg githubRunId "$GITHUB_RUN_ID" --arg activeSlot "$SLOT" --arg previousSlot "$PREVIOUS" --arg error "切流后健康检查连续失败，已自动回切上一实例" '{status:$status,step:$step,stepStatus:$stepStatus,serviceId:$serviceId,githubRunId:$githubRunId,activeSlot:$activeSlot,previousSlot:$previousSlot,error:$error}')"
+            exit 1
+          fi
+
+      - name: Report success
+        if: success()
+        shell: bash
+        env:
+          IMAGE_REF: ${{ inputs.mode == 'rollback' && steps.rollback_image.outputs.image_ref || steps.image.outputs.image_ref }}
+          IMAGE_DIGEST: ${{ inputs.mode == 'rollback' && steps.rollback_image.outputs.image_digest || steps.image.outputs.image_digest }}
+        run: |
+          RESULT="$(printf '%s' '${{ steps.deploy.outputs.result }}' | base64 -d)"
+          SLOT="$(printf '%s' "$RESULT" | jq -r '.activeSlot')"
+          PREVIOUS="$(printf '%s' "$RESULT" | jq -r '.previousSlot')"
+          LATENCY="$(printf '%s' "$RESULT" | jq -r '.latencyMs')"
+          STEPS="migration deploy health switch observe"
+          [[ "${{ inputs.mode }}" == "rollback" ]] && STEPS="deploy health switch observe"
+          for STEP in $STEPS; do
+            STATUS=VERIFYING
+            [[ "$STEP" == "observe" ]] && STATUS=SUCCEEDED
+            curl -fsS -X POST "$CALLBACK_URL/api/internal/deployments/$RUN_ID/events" \
+              -H "Content-Type: application/json" -H "X-Chorify-Deploy-Secret: $CALLBACK_SECRET" \
+              -d "$(jq -n --arg status "$STATUS" --arg step "$STEP" --arg stepStatus SUCCEEDED --arg serviceId "$SERVICE_ID" --arg githubRunId "$GITHUB_RUN_ID" --arg githubRunUrl "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --arg imageRef "$IMAGE_REF" --arg imageDigest "$IMAGE_DIGEST" --arg activeSlot "$SLOT" --arg previousSlot "$PREVIOUS" --argjson latencyMs "$LATENCY" '{status:$status,step:$step,stepStatus:$stepStatus,serviceId:$serviceId,githubRunId:$githubRunId,githubRunUrl:$githubRunUrl,imageRef:$imageRef,imageDigest:$imageDigest,activeSlot:$activeSlot,previousSlot:$previousSlot,latencyMs:$latencyMs}')"
+          done
+
+      - name: Report failure
+        if: failure()
+        shell: bash
+        run: |
+          curl -sS -X POST "$CALLBACK_URL/api/internal/deployments/$RUN_ID/events" \
+            -H "Content-Type: application/json" -H "X-Chorify-Deploy-Secret: $CALLBACK_SECRET" \
+            -d "$(jq -n --arg status FAILED --arg step deploy --arg stepStatus FAILED --arg serviceId "$SERVICE_ID" --arg githubRunId "$GITHUB_RUN_ID" --arg githubRunUrl "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --arg error "GitHub Actions 执行失败，流量未切换或已自动回切" '{status:$status,step:$step,stepStatus:$stepStatus,serviceId:$serviceId,githubRunId:$githubRunId,githubRunUrl:$githubRunUrl,error:$error}')"

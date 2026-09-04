@@ -118,6 +118,8 @@ export async function PATCH(
     return NextResponse.json({ error: "没有编辑权限" }, { status: 403 });
   if (!(module in baseSchemas) || !(await owns(module, itemId, projectId)))
     return NextResponse.json({ error: "记录不存在" }, { status: 404 });
+  if (module === "releases" && !(await prisma.release.findUnique({ where: { id: itemId }, select: { isLegacy: true } }))?.isLegacy)
+    return NextResponse.json({ error: "CI/CD 发布记录不可修改" }, { status: 409 });
   const parsed = baseSchemas[module as keyof typeof baseSchemas].safeParse(
     await request.json(),
   );
@@ -256,6 +258,8 @@ export async function DELETE(
     );
   if (!(module in resources) || !(await owns(module, itemId, projectId)))
     return NextResponse.json({ error: "记录不存在" }, { status: 404 });
+  if (module === "releases" && !(await prisma.release.findUnique({ where: { id: itemId }, select: { isLegacy: true } }))?.isLegacy)
+    return NextResponse.json({ error: "CI/CD 发布记录不可删除" }, { status: 409 });
   try {
     if (module === "requirements")
       await prisma.requirement.delete({ where: { id: itemId } });
