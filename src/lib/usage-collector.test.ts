@@ -32,8 +32,17 @@ describe("usage collector credentials", () => {
     const installer = await (await getInstallerScript()).text();
 
     expect(installer).toContain("System.Text.UTF8Encoding($true)");
+    expect(installer).toContain(".TrimStart([char]0xFEFF)");
     expect(installer).toContain("$reuseExisting = $true");
     expect(installer).toContain('status="HEALTHY"');
     expect(installer).toContain("if ($statusCode -ne 401) { throw }");
+  });
+
+  it("does not use Measure-Object properties on usage hashtables in Windows PowerShell 5.1", async () => {
+    const collector = await (await getCollectorScript()).text();
+
+    expect(collector).not.toContain("Measure-Object -Property activeSeconds");
+    expect(collector).not.toContain("Measure-Object -Property sessions");
+    expect(collector).toContain("foreach($event in $events)");
   });
 });

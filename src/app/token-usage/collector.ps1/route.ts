@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 const script = String.raw`param([switch]$Quiet)
 $ErrorActionPreference = "Stop"
-$collectorVersion = "0.2.1"
+$collectorVersion = "0.2.3"
 $stopwatch = [Diagnostics.Stopwatch]::StartNew()
 try {
   try { Add-Type -AssemblyName System.Security.Cryptography.ProtectedData -ErrorAction Stop } catch { Add-Type -AssemblyName System.Security -ErrorAction Stop }
@@ -116,10 +116,12 @@ try {
   Invoke-RestMethod -Method Post -Uri "$($config.baseUrl)/api/v1/usage-collectors/heartbeat" -Headers $headers -ContentType "application/json" -Body $heartbeat | Out-Null
   $stopwatch.Stop()
   if (-not $Quiet) {
-    $activeTotal = ($events | Measure-Object -Property activeSeconds -Sum).Sum
+    $activeTotal = [long]0
+    $sessionTotal = [long]0
+    foreach($event in $events) { $activeTotal += Number-Or-Zero $event.activeSeconds; $sessionTotal += Number-Or-Zero $event.sessions }
     Write-Host "扫描完成，用时 $([Math]::Round($stopwatch.Elapsed.TotalSeconds,1)) 秒。"
     Write-Host "已扫描 $scannedFiles 个文件，解析 $parsedRecords 条用量记录；新增 $acceptedRecords 条，重复 $duplicateRecords 条。"
-    Write-Host "识别会话 $((($events | Measure-Object -Property sessions -Sum).Sum)) 个，AI Worker 活跃时间 $([Math]::Round($activeTotal/60,1)) 分钟。"
+    Write-Host "识别会话 $sessionTotal 个，AI Worker 活跃时间 $([Math]::Round($activeTotal/60,1)) 分钟。"
   }
   exit 0
 } catch {
