@@ -74,5 +74,5 @@ Write-Host "安全提示：不会上传提示词、代码、文件正文或任�
 `;
 
 export async function GET() {
-  return new NextResponse(`\uFEFF${script}`, { headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" } });
+  return new NextResponse(script, { headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" } });
 }

@@ -16,7 +16,7 @@ describe("usage collector credentials", () => {
     expect(safeHashEqual(first, second)).toBe(false);
   });
 
-  it("serves PowerShell scripts with a UTF-8 BOM for Windows PowerShell 5.1", async () => {
+  it("adds a UTF-8 BOM only to the collector file executed by Windows PowerShell 5.1", async () => {
     const collectorResponse = await getCollectorScript();
     const installerResponse = await getInstallerScript();
     const collectorBytes = new Uint8Array(await collectorResponse.clone().arrayBuffer());
@@ -24,7 +24,7 @@ describe("usage collector credentials", () => {
     const collector = await collectorResponse.text();
 
     expect([...collectorBytes.slice(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
-    expect([...installerBytes.slice(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
+    expect([...installerBytes.slice(0, 3)]).not.toEqual([0xef, 0xbb, 0xbf]);
     expect(collector).toContain(`$collectorVersion = "${COLLECTOR_VERSION}"`);
   });
 
