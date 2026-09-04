@@ -46,7 +46,6 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   if (viewer.role === "GUEST") return NextResponse.json({ error: "访客不可查看团队成员统计" }, { status: 403 });
 
   const today = shanghaiBoundary("today"), week = shanghaiBoundary("week"), month = shanghaiBoundary("month");
-  const detailStart = new Date(today); detailStart.setUTCMonth(detailStart.getUTCMonth() - 12);
   const canViewDetails = canViewUsageDetails(viewerId, member.userId, viewer.role, member.aiUsageVisibility);
   const canViewSummary = isTeamManager(viewer.role) || canViewDetails;
   const teamProject = { project: { teamId } };
@@ -62,7 +61,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const durations = closed.flatMap((item) => item.closedAt ? [item.closedAt.getTime() - item.createdAt.getTime()] : []);
   const averageRequirementHours = durations.length ? Math.round(durations.reduce((sum, value) => sum + value, 0) / durations.length / 3_600_000) : null;
   const inRange = (start: Date) => usageRows.filter((row) => row.date >= start);
-  const details = usageRows.filter((row) => row.date >= detailStart);
+  const details = usageRows;
   return NextResponse.json({
     contribution: { requirementsProposed: requirements.length, requirementsClosed: closed.length, averageRequirementHours, weeklyCompletedTasks: weeklyCompleted, pendingAcceptance, currentTasks },
     usage: {
