@@ -16,6 +16,22 @@ if [[ "$ACTION" == "registry-login" ]]; then
   exec docker login ghcr.io -u "$3" --password-stdin
 fi
 
+if [[ "$ACTION" == "image-load" ]]; then
+  [[ $# -eq 3 ]] || { echo "usage: image-load <service> <image@digest>" >&2; exit 2; }
+  SERVICE="$2"
+  IMAGE_REF="$3"
+  [[ "$SERVICE" =~ ^[a-z0-9][a-z0-9-]{0,49}$ ]] || { echo "invalid service" >&2; exit 2; }
+  [[ "$IMAGE_REF" =~ ^ghcr\.io/[a-z0-9._/-]+:[a-f0-9]{40}@sha256:[a-f0-9]{64}$ ]] || { echo "image must use an immutable GHCR digest" >&2; exit 2; }
+  LOCAL_REF="${IMAGE_REF%@*}"
+  gzip -dc | docker load >/dev/null
+  IMAGE_ID="$(docker image inspect "$LOCAL_REF" --format '{{.Id}}')"
+  DIGEST="${IMAGE_REF##*@sha256:}"
+  install -d -m 0750 "$STATE_DIR/preloaded"
+  printf '%s\n%s\n' "$LOCAL_REF" "$IMAGE_ID" > "$STATE_DIR/preloaded/$DIGEST"
+  echo "preloaded $LOCAL_REF"
+  exit 0
+fi
+
 [[ "$ACTION" == "deploy" && $# -eq 4 ]] || { echo "usage: deploy <service> <image@digest> <run-id>" >&2; exit 2; }
 SERVICE="$2"
 IMAGE_REF="$3"
@@ -27,6 +43,18 @@ CONFIG="$ROOT/deploy/services/$SERVICE.env"
 [[ -r "$CONFIG" ]] || { echo "unknown service" >&2; exit 2; }
 source "$CONFIG"
 
+DEPLOY_IMAGE_REF="$IMAGE_REF"
+DIGEST="${IMAGE_REF##*@sha256:}"
+PRELOADED="$STATE_DIR/preloaded/$DIGEST"
+if [[ -r "$PRELOADED" ]]; then
+  mapfile -t PRELOADED_DATA < "$PRELOADED"
+  LOCAL_REF="${PRELOADED_DATA[0]:-}"
+  EXPECTED_ID="${PRELOADED_DATA[1]:-}"
+  if [[ "$LOCAL_REF" == "${IMAGE_REF%@*}" ]] && [[ "$(docker image inspect "$LOCAL_REF" --format '{{.Id}}' 2>/dev/null || true)" == "$EXPECTED_ID" ]]; then
+    DEPLOY_IMAGE_REF="$LOCAL_REF"
+  fi
+fi
+
 CURRENT="blue"
 [[ -f "$STATE_DIR/$SERVICE.active" ]] && CURRENT="$(<"$STATE_DIR/$SERVICE.active")"
 [[ "$CURRENT" == "blue" || "$CURRENT" == "green" ]] || CURRENT="blue"
@@ -34,7 +62,7 @@ if [[ "$CURRENT" == "blue" ]]; then TARGET="green"; HOST_PORT="$GREEN_PORT"; els
 PROJECT="aipmf-$SERVICE-$TARGET"
 
 cd "$ROOT"
-export IMAGE_REF HOST_PORT
+export IMAGE_REF="$DEPLOY_IMAGE_REF" HOST_PORT
 docker compose -p "$PROJECT" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" run --rm migrate
 docker compose -p "$PROJECT" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d app
 

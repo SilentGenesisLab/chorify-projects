@@ -132,6 +132,15 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           printf '%s\n' "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
 
+      - name: Preload image over SSH
+        if: inputs.mode == 'deploy'
+        shell: bash
+        env:
+          IMAGE_REF: ${{ steps.image.outputs.image_ref }}
+          IMAGE_DIGEST: ${{ steps.image.outputs.image_digest }}
+        run: |
+          docker save "$IMAGE_REF" | gzip -1 | ssh "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" "image-load $SERVICE_SLUG $IMAGE_REF@$IMAGE_DIGEST"
+
       - name: Deploy inactive slot and switch traffic
         id: deploy
         shell: bash
