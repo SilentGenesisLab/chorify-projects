@@ -30,7 +30,11 @@ $action = 'powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -Execut
 schtasks /Create /TN ChorifyUsageCollector /TR $action /SC MINUTE /MO 30 /F | Out-Null
 Write-Host "首次扫描并上报中..."
 & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $collectorPath
-if ($LASTEXITCODE -ne 0) { throw "首次扫描失败，请稍后运行计划任务重试。" }
+if ($LASTEXITCODE -ne 0) {
+  $logPath = Join-Path $installDir "collector.log"
+  if (Test-Path $logPath) { Write-Host (Get-Content -Raw $logPath) -ForegroundColor Red }
+  throw "首次扫描失败，错误日志：$logPath"
+}
 Write-Host "已接入。ChorifyUsageCollector 将每 30 分钟静默上报 Codex 与 Claude Code Token 汇总。"
 Write-Host "配置位置：$configPath"
 `;

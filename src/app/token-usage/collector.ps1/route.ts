@@ -9,6 +9,7 @@ try {
 } catch { exit 1 }
 $installDir = Join-Path $env:USERPROFILE ".chorify-usage"
 $configPath = Join-Path $installDir "config.json"
+$logPath = Join-Path $installDir "collector.log"
 $config = Get-Content -Raw $configPath | ConvertFrom-Json
 $encrypted = [Convert]::FromBase64String([string]$config.encryptedSecret)
 $secretBytes = [Security.Cryptography.ProtectedData]::Unprotect($encrypted,$null,[Security.Cryptography.DataProtectionScope]::CurrentUser)
@@ -29,7 +30,20 @@ function Hash-Text([string]$value) {
   $sha = [Security.Cryptography.SHA256]::Create()
   try { return ([BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($value)))).Replace("-","").ToLowerInvariant() } finally { $sha.Dispose() }
 }
-function Number-Or-Zero($value) { if ($null -eq $value) { return 0 }; return [Math]::Max(0,[long]$value) }
+function Number-Or-Zero($value) {
+  try {
+    if ($null -eq $value) { return [long]0 }
+    $candidate = $value
+    if ($value -is [Collections.IEnumerable] -and $value -isnot [string]) {
+      $items = @($value)
+      if ($items.Count -eq 0) { return [long]0 }
+      $candidate = $items[$items.Count - 1]
+    }
+    $number = [long]0
+    if (-not [long]::TryParse([string]$candidate,[ref]$number)) { return [long]0 }
+    return [Math]::Max([long]0,$number)
+  } catch { return [long]0 }
+}
 function Add-Usage($hash,$date,$tool,$model,$input,$output,$cache,$reasoning,$sessions) {
   $events.Add(@{eventHash=$hash;date=$date;tool=$tool;model=if($model){[string]$model}else{"unknown"};inputTokens=Number-Or-Zero $input;outputTokens=Number-Or-Zero $output;cacheTokens=Number-Or-Zero $cache;reasoningTokens=Number-Or-Zero $reasoning;sessions=$sessions;estimatedCost=$null})
 }
@@ -77,7 +91,10 @@ try {
   Invoke-RestMethod -Method Post -Uri "$($config.baseUrl)/api/v1/usage-collectors/heartbeat" -Headers $headers -ContentType "application/json" -Body $heartbeat | Out-Null
   exit 0
 } catch {
-  try { $message=$_.Exception.Message;$heartbeat=@{clientVersion=$collectorVersion;status="ERROR";error=$message.Substring(0,[Math]::Min(500,$message.Length))}|ConvertTo-Json;Invoke-RestMethod -Method Post -Uri "$($config.baseUrl)/api/v1/usage-collectors/heartbeat" -Headers $headers -ContentType "application/json" -Body $heartbeat|Out-Null } catch { }
+  $message = $_.Exception.Message
+  $position = $_.InvocationInfo.PositionMessage
+  try { ("[$(Get-Date -Format o)] $message" + [Environment]::NewLine + $position) | Set-Content -Encoding UTF8 $logPath } catch { }
+  try { $heartbeat=@{clientVersion=$collectorVersion;status="ERROR";error=$message.Substring(0,[Math]::Min(500,$message.Length))}|ConvertTo-Json;Invoke-RestMethod -Method Post -Uri "$($config.baseUrl)/api/v1/usage-collectors/heartbeat" -Headers $headers -ContentType "application/json" -Body $heartbeat|Out-Null } catch { }
   exit 1
 }
 `;
