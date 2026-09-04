@@ -10,8 +10,9 @@ RUN npx prisma generate && npm run build
 
 FROM node:22-alpine AS production-dependencies
 WORKDIR /app
-COPY package.json package-lock.json ./
-RUN npm ci --omit=dev --registry=https://registry.npmmirror.com
+RUN npm init -y \
+  && npm install --omit=dev --no-save prisma@6.12.0 --registry=https://registry.npmmirror.com \
+  && npm cache clean --force
 
 FROM node:22-alpine AS runner
 WORKDIR /app
