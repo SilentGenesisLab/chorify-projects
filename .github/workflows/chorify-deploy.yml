@@ -171,7 +171,7 @@ jobs:
           IMAGE_REF: ${{ inputs.mode == 'rollback' && steps.rollback_image.outputs.image_ref || steps.image.outputs.image_ref }}
           IMAGE_DIGEST: ${{ inputs.mode == 'rollback' && steps.rollback_image.outputs.image_digest || steps.image.outputs.image_digest }}
         run: |
-          RESULT="$(printf '%s' '${{ steps.deploy.outputs.result }}' | base64 -d)"
+          RESULT="$(printf '%s' '${{ steps.deploy.outputs.result }}' | base64 -d | tail -n 1)"
           SLOT="$(printf '%s' "$RESULT" | jq -r '.activeSlot')"
           PREVIOUS="$(printf '%s' "$RESULT" | jq -r '.previousSlot')"
           LATENCY="$(printf '%s' "$RESULT" | jq -r '.latencyMs')"

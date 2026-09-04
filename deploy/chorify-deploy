@@ -63,8 +63,8 @@ PROJECT="aipmf-$SERVICE-$TARGET"
 
 cd "$ROOT"
 export IMAGE_REF="$DEPLOY_IMAGE_REF" HOST_PORT
-docker compose -p "$PROJECT" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" run --rm migrate
-docker compose -p "$PROJECT" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d app
+docker compose -p "$PROJECT" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" run --rm migrate >&2
+docker compose -p "$PROJECT" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d app >&2
 
 healthy=false
 for _ in $(seq 1 30); do
