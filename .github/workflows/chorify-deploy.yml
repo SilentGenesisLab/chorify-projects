@@ -177,9 +177,11 @@ jobs:
           done
 
       - name: Report failure
-        if: failure()
+        if: failure() || cancelled()
         shell: bash
         run: |
+          ERROR="GitHub Actions 执行失败，流量未切换或已自动回切"
+          [[ "${{ job.status }}" == "cancelled" ]] && ERROR="GitHub Actions 已取消，流量未切换"
           curl -sS -X POST "$CALLBACK_URL/api/internal/deployments/$RUN_ID/events" \
             -H "Content-Type: application/json" -H "X-Chorify-Deploy-Secret: $CALLBACK_SECRET" \
-            -d "$(jq -n --arg status FAILED --arg step deploy --arg stepStatus FAILED --arg serviceId "$SERVICE_ID" --arg githubRunId "$GITHUB_RUN_ID" --arg githubRunUrl "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --arg error "GitHub Actions 执行失败，流量未切换或已自动回切" '{status:$status,step:$step,stepStatus:$stepStatus,serviceId:$serviceId,githubRunId:$githubRunId,githubRunUrl:$githubRunUrl,error:$error}')"
+            -d "$(jq -n --arg status FAILED --arg step deploy --arg stepStatus FAILED --arg serviceId "$SERVICE_ID" --arg githubRunId "$GITHUB_RUN_ID" --arg githubRunUrl "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --arg error "$ERROR" '{status:$status,step:$step,stepStatus:$stepStatus,serviceId:$serviceId,githubRunId:$githubRunId,githubRunUrl:$githubRunUrl,error:$error}')"
