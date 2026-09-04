@@ -13,6 +13,7 @@ const eventSchema = z.object({
   cacheTokens: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).default(0),
   reasoningTokens: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).default(0),
   sessions: z.number().int().min(0).max(1_000).default(0),
+  activeSeconds: z.number().int().min(0).max(86_400).default(0),
   estimatedCost: z.number().min(0).max(1_000_000).nullable().default(null),
 });
 const batchSchema = z.object({ events: z.array(eventSchema).min(1).max(500), clientVersion: z.string().trim().min(1).max(30) });
@@ -31,8 +32,8 @@ export async function POST(request: NextRequest) {
       const date = new Date(`${event.date}T00:00:00.000Z`);
       await tx.tokenUsageDaily.upsert({
         where: { deviceId_date_tool_model: { deviceId: device.id, date, tool: event.tool, model: event.model } },
-        create: { userId: device.userId, deviceId: device.id, date, tool: event.tool, model: event.model, inputTokens: BigInt(event.inputTokens), outputTokens: BigInt(event.outputTokens), cacheTokens: BigInt(event.cacheTokens), reasoningTokens: BigInt(event.reasoningTokens), sessions: event.sessions, estimatedCost: event.estimatedCost },
-        update: { inputTokens: { increment: BigInt(event.inputTokens) }, outputTokens: { increment: BigInt(event.outputTokens) }, cacheTokens: { increment: BigInt(event.cacheTokens) }, reasoningTokens: { increment: BigInt(event.reasoningTokens) }, sessions: { increment: event.sessions }, ...(event.estimatedCost === null ? {} : { estimatedCost: { increment: event.estimatedCost } }) },
+        create: { userId: device.userId, deviceId: device.id, date, tool: event.tool, model: event.model, inputTokens: BigInt(event.inputTokens), outputTokens: BigInt(event.outputTokens), cacheTokens: BigInt(event.cacheTokens), reasoningTokens: BigInt(event.reasoningTokens), sessions: event.sessions, activeSeconds: event.activeSeconds, estimatedCost: event.estimatedCost },
+        update: { inputTokens: { increment: BigInt(event.inputTokens) }, outputTokens: { increment: BigInt(event.outputTokens) }, cacheTokens: { increment: BigInt(event.cacheTokens) }, reasoningTokens: { increment: BigInt(event.reasoningTokens) }, sessions: { increment: event.sessions }, activeSeconds: { increment: event.activeSeconds }, ...(event.estimatedCost === null ? {} : { estimatedCost: { increment: event.estimatedCost } }) },
       });
     }
     await tx.usageCollectorDevice.update({ where: { id: device.id }, data: { clientVersion: input.data.clientVersion, lastSeenAt: new Date(), lastStatus: "HEALTHY", lastError: null } });

@@ -8,6 +8,7 @@ import { SelectField } from "@/components/ui/select-field";
 import { TeamOkrPanel } from "@/components/team-okr-panel";
 import { WeeklyReportsPanel } from "@/components/weekly-reports-panel";
 import { TeamPersonalInfo } from "@/components/team-personal-info";
+import { TeamAiUsageRanking } from "@/components/team-ai-usage-ranking";
 
 type Role = "OWNER" | "ADMIN" | "MEMBER" | "GUEST";
 type TeamSummary = { id:string; name:string; description:string|null; role:Role; roleLabel:string; memberCount:number; projectCount:number };
@@ -76,7 +77,7 @@ function TeamDetailPage({teamId}:{teamId:string}){
     {tab==="profile"&&<TeamPersonalInfo team={team}/>}
     {tab==="okr"&&<TeamOkrPanel team={team}/>}
     {tab==="weekly"&&<WeeklyReportsPanel team={team}/>}
-    {tab==="analytics"&&<AnalyticsPanel team={team}/>}
+    {tab==="analytics"&&<div className="space-y-5"><AnalyticsPanel team={team}/>{team.currentRole!=="GUEST"&&<TeamAiUsageRanking teamId={team.id}/>}</div>}
     {tab==="projects"&&<Projects team={team}/>}
     {tab==="members"&&<Members team={team} reload={load}/>}
     {tab==="messages"&&<MessagesPanel team={team}/>}

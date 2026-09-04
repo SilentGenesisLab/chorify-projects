@@ -16,29 +16,35 @@ try {
   throw "当前 PowerShell 无法加载 Windows DPAPI。请使用 Windows PowerShell 5.1 或 PowerShell 7 后重试；注册码尚未使用。"
 }
 
-Write-Host "下载 Chorify Token 采集器..."
+Write-Host "下载 Chorify Token 采集器 v0.2.0..."
 Invoke-WebRequest -UseBasicParsing -Uri "$BaseUrl/token-usage/collector.ps1" -OutFile $collectorPath
 $deviceId = if (Test-Path $configPath) { try { (Get-Content -Raw $configPath | ConvertFrom-Json).deviceId } catch { $null } } else { $null }
 if (-not $deviceId) { $deviceId = [guid]::NewGuid().ToString() }
-$body = @{ registrationCode=$RegistrationCode; deviceId=$deviceId; deviceName=$env:COMPUTERNAME; platform="windows"; clientVersion="0.1.0" } | ConvertTo-Json
+$body = @{ registrationCode=$RegistrationCode; deviceId=$deviceId; deviceName=$env:COMPUTERNAME; platform="windows"; clientVersion="0.2.0" } | ConvertTo-Json
 $registered = Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/v1/usage-collectors/register" -ContentType "application/json" -Body $body
 $secretBytes = [Text.Encoding]::UTF8.GetBytes([string]$registered.deviceSecret)
 $encrypted = [Security.Cryptography.ProtectedData]::Protect($secretBytes,$null,[Security.Cryptography.DataProtectionScope]::CurrentUser)
-@{ baseUrl=$BaseUrl; deviceId=$deviceId; encryptedSecret=[Convert]::ToBase64String($encrypted); clientVersion="0.1.0"; statePath=$statePath } | ConvertTo-Json | Set-Content -Encoding UTF8 $configPath
+@{ baseUrl=$BaseUrl; deviceId=$deviceId; encryptedSecret=[Convert]::ToBase64String($encrypted); clientVersion="0.2.0"; statePath=$statePath } | ConvertTo-Json | Set-Content -Encoding UTF8 $configPath
+Write-Host "✓ 已完成设备注册。配置保存在 $configPath"
 
-$action = 'powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + $collectorPath + '"'
+$action = 'powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + $collectorPath + '" -Quiet'
 schtasks /Create /TN ChorifyUsageCollector /TR $action /SC MINUTE /MO 30 /F | Out-Null
-Write-Host "首次扫描并上报中..."
+Write-Host "✓ 已注册 Windows 计划任务 ChorifyUsageCollector（每 30 分钟后台静默上报）。"
+Write-Host "首次扫描上报中（视本地日志量可能需要 1-5 分钟，请勿关闭窗口）..."
 & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $collectorPath
 if ($LASTEXITCODE -ne 0) {
   $logPath = Join-Path $installDir "collector.log"
   if (Test-Path $logPath) { Write-Host (Get-Content -Raw $logPath) -ForegroundColor Red }
   throw "首次扫描失败，错误日志：$logPath"
 }
-Write-Host "已接入。ChorifyUsageCollector 将每 30 分钟静默上报 Codex 与 Claude Code Token 汇总。"
-Write-Host "配置位置：$configPath"
+Write-Host "===== 安装自检 ====="
+Write-Host "客户端版本：0.2.0"
+$task = Get-ScheduledTask -TaskName ChorifyUsageCollector -ErrorAction SilentlyContinue
+Write-Host "后台任务：$($task.State)（每 30 分钟）"
+Write-Host "✓ 全部成功！后台任务将持续上报 Codex 与 Claude Code Token 汇总。"
+Write-Host "安全提示：不会上传提示词、代码、文件正文或任何密钥。分享日志时请对注册码和设备凭据打码。"
 `;
 
 export async function GET() {
-  return new NextResponse(script, { headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "public, max-age=300" } });
+  return new NextResponse(script, { headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" } });
 }

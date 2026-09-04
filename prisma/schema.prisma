@@ -26,6 +26,12 @@ enum TeamRole {
   GUEST
 }
 
+enum AiUsageVisibility {
+  SELF
+  MANAGERS
+  TEAM
+}
+
 enum OkrPeriodType {
   MONTHLY
   QUARTERLY
@@ -272,6 +278,7 @@ model TeamMember {
   title          String?
   responsibility String?
   bio            String?
+  aiUsageVisibility AiUsageVisibility @default(MANAGERS)
   team           Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
   user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -524,6 +531,7 @@ model TokenUsageDaily {
   cacheTokens     BigInt               @default(0)
   reasoningTokens BigInt               @default(0)
   sessions        Int                  @default(0)
+  activeSeconds   Int                  @default(0)
   estimatedCost   Decimal?             @db.Decimal(18, 6)
   user            User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   device          UsageCollectorDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
