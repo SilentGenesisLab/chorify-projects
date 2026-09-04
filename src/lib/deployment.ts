@@ -20,6 +20,13 @@ export const DEPLOYMENT_STEPS = [
   ["observe", "稳定性观察"],
 ] as const;
 
+const ROLLBACK_SKIPPED_STEPS = new Set(["checkout", "test", "build", "migration"]);
+
+export function shouldApplyDeploymentStepEvent(runType: string, step?: string) {
+  if (!step) return false;
+  return !(runType === "ROLLBACK" && ROLLBACK_SKIPPED_STEPS.has(step));
+}
+
 export type ManifestComponent = {
   serviceId: string;
   service: string;

@@ -4,6 +4,7 @@ import {
   deploymentHealthStatus,
   deploymentManifestHash,
   migrationRisk,
+  shouldApplyDeploymentStepEvent,
   verifyWebhookSignature,
 } from "@/lib/deployment";
 import { createHmac } from "node:crypto";
@@ -49,5 +50,12 @@ describe("deployment rules", () => {
     const signature = `sha256=${createHmac("sha256", "secret").update(payload).digest("hex")}`;
     expect(verifyWebhookSignature(payload, signature, "secret")).toBe(true);
     expect(verifyWebhookSignature(payload, signature, "wrong")).toBe(false);
+  });
+
+  it("keeps build-only steps skipped during rollback callbacks", () => {
+    expect(shouldApplyDeploymentStepEvent("ROLLBACK", "checkout")).toBe(false);
+    expect(shouldApplyDeploymentStepEvent("ROLLBACK", "migration")).toBe(false);
+    expect(shouldApplyDeploymentStepEvent("ROLLBACK", "deploy")).toBe(true);
+    expect(shouldApplyDeploymentStepEvent("DEPLOY", "checkout")).toBe(true);
   });
 });

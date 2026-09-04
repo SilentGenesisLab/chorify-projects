@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { shouldApplyDeploymentStepEvent } from "@/lib/deployment";
 
 const schema = z.object({
   status: z.enum(["BUILDING", "DEPLOYING", "VERIFYING", "SUCCEEDED", "FAILED", "ROLLED_BACK"]),
@@ -48,7 +49,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (["FAILED", "ROLLED_BACK", "CANCELLED"].includes(run.status) && input.status !== run.status)
     return NextResponse.json({ ok: true, ignored: true });
 
-  if (input.step) {
+  if (input.step && shouldApplyDeploymentStepEvent(run.type, input.step)) {
     await prisma.deploymentStep.updateMany({
       where: { deploymentRunId: run.id, key: input.step },
       data: {
