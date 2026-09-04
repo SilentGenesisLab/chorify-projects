@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 
 const script = String.raw`$ErrorActionPreference = "Stop"
 $collectorVersion = "0.1.0"
+try {
+  try { Add-Type -AssemblyName System.Security.Cryptography.ProtectedData -ErrorAction Stop } catch { Add-Type -AssemblyName System.Security -ErrorAction Stop }
+  $null = [Security.Cryptography.ProtectedData]
+  $null = [Security.Cryptography.DataProtectionScope]
+} catch { exit 1 }
 $installDir = Join-Path $env:USERPROFILE ".chorify-usage"
 $configPath = Join-Path $installDir "config.json"
 $config = Get-Content -Raw $configPath | ConvertFrom-Json

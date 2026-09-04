@@ -20,7 +20,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const invites = canManage ? await prisma.teamInvite.findMany({ where: { teamId }, orderBy: { createdAt: "desc" }, include: { createdBy: { select: { name: true } } } }) : [];
   return NextResponse.json({ team: {
     id: team.id, name: team.name, description: team.description, mission: team.mission, responsibilities: team.responsibilities, createdAt: team.createdAt,
-    currentRole: membership.role, currentRoleLabel: TEAM_ROLE_LABELS[membership.role],
+    currentRole: membership.role, currentRoleLabel: TEAM_ROLE_LABELS[membership.role], viewerUserId: userId,
     permissions: { canManage, canInviteAdmin: membership.role === "OWNER", canCreateProject: canCreateTeamProject(membership.role) },
     members: team.members.map((item) => ({ id: item.id, userId: item.userId, name: item.displayName || item.user.name, accountName: item.user.name, displayName: item.displayName, phone: maskedPhone(item.user.phone), avatarColor: item.user.avatarColor, role: item.role, roleLabel: TEAM_ROLE_LABELS[item.role], title: item.title, responsibility: item.responsibility, bio: item.bio, joinedAt: item.joinedAt })),
     projects: team.projects.map((project) => ({ id: project.id, code: project.code, name: project.name, description: project.description, status: project.status, memberCount: project._count.members, taskCount: project._count.tasks, updatedAt: project.updatedAt })),

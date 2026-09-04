@@ -8,6 +8,14 @@ $configPath = Join-Path $installDir "config.json"
 $statePath = Join-Path $installDir "state.json"
 New-Item -ItemType Directory -Force -Path $installDir | Out-Null
 
+try {
+  try { Add-Type -AssemblyName System.Security.Cryptography.ProtectedData -ErrorAction Stop } catch { Add-Type -AssemblyName System.Security -ErrorAction Stop }
+  $null = [Security.Cryptography.ProtectedData]
+  $null = [Security.Cryptography.DataProtectionScope]
+} catch {
+  throw "当前 PowerShell 无法加载 Windows DPAPI。请使用 Windows PowerShell 5.1 或 PowerShell 7 后重试；注册码尚未使用。"
+}
+
 Write-Host "下载 Chorify Token 采集器..."
 Invoke-WebRequest -UseBasicParsing -Uri "$BaseUrl/token-usage/collector.ps1" -OutFile $collectorPath
 $deviceId = if (Test-Path $configPath) { try { (Get-Content -Raw $configPath | ConvertFrom-Json).deviceId } catch { $null } } else { $null }

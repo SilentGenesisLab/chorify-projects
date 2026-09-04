@@ -7,11 +7,12 @@ import { BarChart3, Building2, Check, ChevronRight, Clipboard, Eye, FolderKanban
 import { SelectField } from "@/components/ui/select-field";
 import { TeamOkrPanel } from "@/components/team-okr-panel";
 import { WeeklyReportsPanel } from "@/components/weekly-reports-panel";
+import { TeamPersonalInfo } from "@/components/team-personal-info";
 
 type Role = "OWNER" | "ADMIN" | "MEMBER" | "GUEST";
 type TeamSummary = { id:string; name:string; description:string|null; role:Role; roleLabel:string; memberCount:number; projectCount:number };
 type TeamDetail = TeamSummary & {
-  currentRole:Role; currentRoleLabel:string; createdAt:string; mission:string|null; responsibilities:string|null;
+  currentRole:Role; currentRoleLabel:string; viewerUserId:string; createdAt:string; mission:string|null; responsibilities:string|null;
   permissions:{canManage:boolean;canInviteAdmin:boolean;canCreateProject:boolean};
   members:Array<{id:string;userId:string;name:string;accountName:string;displayName:string|null;phone:string;avatarColor:string;role:Role;roleLabel:string;title:string|null;responsibility:string|null;bio:string|null;joinedAt:string}>;
   projects:Array<{id:string;code:string;name:string;description:string;status:string;memberCount:number;taskCount:number;updatedAt:string}>;
@@ -20,7 +21,7 @@ type TeamDetail = TeamSummary & {
 type MemberDetail = TeamDetail["members"][number] & { objectives:Array<{id:string;title:string;description:string;periodLabel:string;status:string;owner:{id:string;name:string};keyResults:Array<{id:string;title:string;targetValue:number;currentValue:number;unit:string;owner:{id:string;name:string}}>}> };
 
 const roleClass:Record<Role,string>={OWNER:"bg-orange-50 text-orange-700",ADMIN:"bg-violet-50 text-violet-700",MEMBER:"bg-emerald-50 text-emerald-700",GUEST:"bg-slate-100 text-slate-600"};
-const tabs=[{id:"overview",label:"概览"},{id:"okr",label:"OKR"},{id:"weekly",label:"周报"},{id:"analytics",label:"团队效能"},{id:"projects",label:"团队项目"},{id:"members",label:"成员"},{id:"messages",label:"消息"},{id:"invites",label:"邀请"},{id:"roles",label:"角色权限"},{id:"settings",label:"设置"}] as const;
+const tabs=[{id:"overview",label:"概览"},{id:"profile",label:"个人信息"},{id:"okr",label:"OKR"},{id:"weekly",label:"周报"},{id:"analytics",label:"团队效能"},{id:"projects",label:"团队项目"},{id:"members",label:"成员"},{id:"messages",label:"消息"},{id:"invites",label:"邀请"},{id:"roles",label:"角色权限"},{id:"settings",label:"设置"}] as const;
 
 async function jsonRequest<T>(url:string, init?:RequestInit):Promise<T>{
   const response=await fetch(url,{...init,headers:{"Content-Type":"application/json",...(init?.headers||{})}});
@@ -72,6 +73,7 @@ function TeamDetailPage({teamId}:{teamId:string}){
     <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><div className="mb-2 flex items-center gap-2 text-xs text-slate-400"><Link href="/teams" className="hover:text-blue-600">团队管理</Link><ChevronRight size={13}/><span>{team.name}</span></div><div className="flex flex-wrap items-center gap-3"><h2 className="text-2xl font-bold tracking-tight">{team.name}</h2><span className={`rounded-full px-2.5 py-1 text-xs font-medium ${roleClass[team.currentRole]}`}>{team.currentRoleLabel}</span></div><p className="mt-1 text-sm text-slate-500">{team.description||"暂无团队介绍"}</p></div>{team.permissions.canManage&&<button onClick={()=>setInviteOpen(true)} className="primary-button"><UserPlus size={17}/>邀请成员</button>}</div>
     {error&&<ErrorBox message={error}/>}<div className="scrollbar-none flex gap-1 overflow-x-auto border-b border-[#e4eaf2]">{tabs.map(item=><button key={item.id} onClick={()=>setTab(item.id)} className={`whitespace-nowrap border-b-2 px-4 py-3 text-sm font-medium ${tab===item.id?"border-blue-600 text-blue-700":"border-transparent text-slate-500 hover:text-slate-900"}`}>{item.label}</button>)}</div>
     {tab==="overview"&&<Overview team={team} onTab={setTab}/>}
+    {tab==="profile"&&<TeamPersonalInfo team={team}/>}
     {tab==="okr"&&<TeamOkrPanel team={team}/>}
     {tab==="weekly"&&<WeeklyReportsPanel team={team}/>}
     {tab==="analytics"&&<AnalyticsPanel team={team}/>}
