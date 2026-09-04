@@ -8,8 +8,10 @@ WORKDIR /app
 COPY . .
 RUN npx prisma generate && npm run build
 
-FROM dependencies AS production-dependencies
-RUN npm prune --omit=dev
+FROM node:22-alpine AS production-dependencies
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --registry=https://registry.npmmirror.com
 
 FROM node:22-alpine AS runner
 WORKDIR /app
