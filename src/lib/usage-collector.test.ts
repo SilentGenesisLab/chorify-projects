@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { createCollectorSecret, hashCollectorSecret, safeHashEqual } from "@/lib/usage-collector";
+import { GET as getCollectorScript } from "@/app/token-usage/collector.ps1/route";
+import { GET as getInstallerScript } from "@/app/token-usage/install.ps1/route";
+import { COLLECTOR_VERSION, createCollectorSecret, hashCollectorSecret, safeHashEqual } from "@/lib/usage-collector";
 
 describe("usage collector credentials", () => {
   it("creates purpose-specific opaque secrets", () => {
@@ -12,5 +14,26 @@ describe("usage collector credentials", () => {
     const second = hashCollectorSecret("collector-secret-b");
     expect(safeHashEqual(first, first)).toBe(true);
     expect(safeHashEqual(first, second)).toBe(false);
+  });
+
+  it("serves PowerShell scripts with a UTF-8 BOM for Windows PowerShell 5.1", async () => {
+    const collectorResponse = await getCollectorScript();
+    const installerResponse = await getInstallerScript();
+    const collectorBytes = new Uint8Array(await collectorResponse.clone().arrayBuffer());
+    const installerBytes = new Uint8Array(await installerResponse.clone().arrayBuffer());
+    const collector = await collectorResponse.text();
+
+    expect([...collectorBytes.slice(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
+    expect([...installerBytes.slice(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
+    expect(collector).toContain(`$collectorVersion = "${COLLECTOR_VERSION}"`);
+  });
+
+  it("makes reinstall reuse a healthy registered device and writes the collector with a BOM", async () => {
+    const installer = await (await getInstallerScript()).text();
+
+    expect(installer).toContain("System.Text.UTF8Encoding($true)");
+    expect(installer).toContain("$reuseExisting = $true");
+    expect(installer).toContain('status="HEALTHY"');
+    expect(installer).toContain("if ($statusCode -ne 401) { throw }");
   });
 });

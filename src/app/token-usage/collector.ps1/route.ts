@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 const script = String.raw`param([switch]$Quiet)
 $ErrorActionPreference = "Stop"
-$collectorVersion = "0.2.0"
+$collectorVersion = "0.2.1"
 $stopwatch = [Diagnostics.Stopwatch]::StartNew()
 try {
   try { Add-Type -AssemblyName System.Security.Cryptography.ProtectedData -ErrorAction Stop } catch { Add-Type -AssemblyName System.Security -ErrorAction Stop }
@@ -132,5 +132,5 @@ try {
 `;
 
 export async function GET() {
-  return new NextResponse(script, { headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" } });
+  return new NextResponse(`\uFEFF${script}`, { headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" } });
 }
