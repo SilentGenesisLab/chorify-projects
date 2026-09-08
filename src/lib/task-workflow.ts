@@ -2,6 +2,7 @@ import type { Priority, TaskStatus } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getProjectAccess } from "@/lib/project-permissions";
+import { createsDependencyCycle, nextStartedAt, validateSchedule } from "@/lib/project-schedule";
 
 export const opaqueId = z.string().trim().min(1, "关联记录不能为空").max(191, "关联记录 ID 过长");
 export const optionalOpaqueId = opaqueId.nullable().optional();
@@ -12,6 +13,7 @@ export const taskFieldsSchema = z.object({
   acceptanceCriteria: z.string().trim().min(2).max(5000),
   priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]),
   status: z.enum(["TODO", "IN_PROGRESS", "PENDING_ACCEPTANCE", "NEEDS_CHANGES", "ACCEPTED", "DONE"]),
+  plannedStartAt: z.string().datetime().nullable().optional(),
   dueAt: z.string().datetime().nullable().optional(),
   requirementId: optionalOpaqueId,
   versionId: optionalOpaqueId,
@@ -27,6 +29,7 @@ export const taskPatchSchema = z.object({
   acceptanceCriteria: z.string().trim().min(2).max(5000).optional(),
   priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]).optional(),
   status: z.enum(["TODO", "IN_PROGRESS", "PENDING_ACCEPTANCE", "NEEDS_CHANGES", "ACCEPTED", "DONE"]).optional(),
+  plannedStartAt: z.string().datetime().nullable().optional(),
   dueAt: z.string().datetime().nullable().optional(),
   requirementId: optionalOpaqueId,
   versionId: optionalOpaqueId,
@@ -56,6 +59,8 @@ function failure(error: string, status = 400): WorkflowResult<never> {
 
 export async function prepareTaskCreate(projectId: string, userId: string, input: z.infer<typeof taskFieldsSchema>): Promise<WorkflowResult<z.infer<typeof taskFieldsSchema>>> {
   if (!["TODO", "IN_PROGRESS"].includes(input.status)) return failure("新任务只能创建为待处理或进行中状态");
+  const scheduleError = validateSchedule(input.plannedStartAt, input.dueAt);
+  if (scheduleError) return failure(scheduleError);
   const membership = await prisma.projectMember.findUnique({ where: { projectId_userId: { projectId, userId } }, select: { userId: true } });
   const assigneeId = input.assigneeId || membership?.userId;
   if (!assigneeId) return failure("请选择任务负责人；当前创建人不是项目成员，不能自动设为负责人");
@@ -76,6 +81,8 @@ export async function prepareTaskCreate(projectId: string, userId: string, input
 }
 
 export async function validateTaskReferences(projectId: string, data: TaskWriteData, currentTaskId?: string): Promise<string | null> {
+  const scheduleError = validateSchedule(data.plannedStartAt, data.dueAt);
+  if (scheduleError) return scheduleError;
   const [project, projectMembers] = await Promise.all([
     prisma.project.findUnique({ where: { id: projectId }, select: { teamId: true } }),
     prisma.projectMember.findMany({ where: { projectId }, select: { userId: true } }),
@@ -106,6 +113,10 @@ export async function validateTaskReferences(projectId: string, data: TaskWriteD
       ? await prisma.task.count({ where: { id: { in: dependencyIds }, projectId } })
       : 0;
     if (count !== dependencyIds.length) return "依赖任务不存在或不属于当前项目";
+    if (currentTaskId && dependencyIds.length) {
+      const edges = await prisma.taskDependency.findMany({ where: { task: { projectId }, taskId: { not: currentTaskId } }, select: { taskId: true, dependsOnId: true } });
+      if (createsDependencyCycle(currentTaskId, dependencyIds, edges)) return "依赖关系不能形成循环";
+    }
   }
   return null;
 }
@@ -125,7 +136,10 @@ export async function quickUpdateTask(taskId: string, userId: string, input: z.i
   }
 
   const updated = await prisma.$transaction(async (tx) => {
-    const next = await tx.task.update({ where: { id: taskId }, data: input });
+    const next = await tx.task.update({
+      where: { id: taskId },
+      data: { ...input, ...(input.status ? { startedAt: nextStartedAt(task.startedAt, task.status, input.status, "task") } : {}) },
+    });
     await tx.auditLog.create({
       data: {
         userId,
@@ -179,7 +193,7 @@ export async function acceptTask(taskId: string, userId: string, input: z.infer<
     });
     await tx.task.update({
       where: { id: taskId },
-      data: { status: passed ? "DONE" : "NEEDS_CHANGES", completedAt: passed ? now : null, firstCompletedAt: passed ? task.firstCompletedAt || now : task.firstCompletedAt, closedAt: passed ? now : null },
+      data: { status: passed ? "DONE" : "NEEDS_CHANGES", startedAt: task.startedAt || now, completedAt: passed ? now : null, firstCompletedAt: passed ? task.firstCompletedAt || now : task.firstCompletedAt, closedAt: passed ? now : null },
     });
     await tx.auditLog.create({
       data: {

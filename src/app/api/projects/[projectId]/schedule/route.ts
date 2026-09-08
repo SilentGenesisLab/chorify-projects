@@ -1,0 +1,108 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getProjectAccess } from "@/lib/project-permissions";
+import { naturalDays, hasDependencyConflict, scheduleHealth } from "@/lib/project-schedule";
+import { getRequestUserId } from "@/lib/team-permissions";
+import { prisma } from "@/lib/prisma";
+
+const MAX_RANGE = 366 * 86_400_000;
+
+function serializeTask(task: Awaited<ReturnType<typeof loadTasks>>[number], now: Date) {
+  return {
+    id: task.id,
+    code: task.code,
+    title: task.title,
+    status: task.status,
+    priority: task.priority,
+    requirementId: task.requirementId,
+    plannedStartAt: task.plannedStartAt?.toISOString() || null,
+    dueAt: task.dueAt?.toISOString() || null,
+    startedAt: task.startedAt?.toISOString() || null,
+    closedAt: task.closedAt?.toISOString() || null,
+    plannedDays: naturalDays(task.plannedStartAt, task.dueAt),
+    actualDays: naturalDays(task.startedAt, task.closedAt || (task.startedAt ? now : null)),
+    health: scheduleHealth(task, now),
+    dependencyConflict: hasDependencyConflict(task),
+    assignee: task.assignee,
+    dependencyIds: task.dependencies.map((item) => item.dependsOnId),
+  };
+}
+
+function loadTasks(projectId: string) {
+  return prisma.task.findMany({
+    where: { projectId },
+    include: {
+      assignee: { select: { id: true, name: true, avatarColor: true } },
+      dependencies: { include: { dependsOn: { select: { dueAt: true, status: true } } } },
+    },
+    orderBy: [{ plannedStartAt: "asc" }, { createdAt: "asc" }],
+  });
+}
+
+export async function GET(request: NextRequest, { params }: { params: Promise<{ projectId: string }> }) {
+  const userId = await getRequestUserId(request);
+  const { projectId } = await params;
+  if (!userId) return NextResponse.json({ error: "请先登录" }, { status: 401 });
+  const access = await getProjectAccess(projectId, userId);
+  if (!access?.canAccess) return NextResponse.json({ error: "无权访问该项目" }, { status: 403 });
+
+  const from = new Date(request.nextUrl.searchParams.get("from") || "");
+  const to = new Date(request.nextUrl.searchParams.get("to") || "");
+  if (!Number.isFinite(from.getTime()) || !Number.isFinite(to.getTime()) || to <= from || to.getTime() - from.getTime() > MAX_RANGE)
+    return NextResponse.json({ error: "排期范围无效，最长可查询一年" }, { status: 400 });
+
+  const statuses = new Set(request.nextUrl.searchParams.getAll("status"));
+  const assigneeId = request.nextUrl.searchParams.get("assigneeId");
+  const includeUnscheduled = request.nextUrl.searchParams.get("includeUnscheduled") !== "false";
+  const [requirements, rawTasks, members] = await Promise.all([
+    prisma.requirement.findMany({
+      where: { projectId },
+      include: { requester: { select: { id: true, name: true, avatarColor: true } } },
+      orderBy: [{ plannedStartAt: "asc" }, { createdAt: "asc" }],
+    }),
+    loadTasks(projectId),
+    prisma.projectMember.findMany({ where: { projectId }, select: { user: { select: { id: true, name: true } } }, orderBy: { user: { name: "asc" } } }),
+  ]);
+  const now = new Date();
+  const overlaps = (start: Date | null, end: Date | null) => start && end
+    ? start < to && end >= from
+    : includeUnscheduled;
+  const tasks = rawTasks.filter((task) =>
+    (!statuses.size || statuses.has(task.status)) &&
+    (!assigneeId || task.assigneeId === assigneeId) &&
+    overlaps(task.plannedStartAt, task.dueAt),
+  );
+  const visibleTaskIds = new Set(tasks.map((task) => task.id));
+  const result = requirements.flatMap((requirement) => {
+    const children = tasks.filter((task) => task.requirementId === requirement.id);
+    const visible = (!statuses.size || statuses.has(requirement.status)) && (!assigneeId || requirement.requesterId === assigneeId) && overlaps(requirement.plannedStartAt, requirement.dueAt);
+    if (!visible && !children.length) return [];
+    const allChildren = rawTasks.filter((task) => task.requirementId === requirement.id);
+    const completed = allChildren.filter((task) => task.status === "DONE" || task.status === "ACCEPTED").length;
+    return [{
+      id: requirement.id,
+      code: requirement.code,
+      title: requirement.title,
+      status: requirement.status,
+      priority: requirement.priority,
+      plannedStartAt: requirement.plannedStartAt?.toISOString() || null,
+      dueAt: requirement.dueAt?.toISOString() || null,
+      startedAt: requirement.startedAt?.toISOString() || null,
+      closedAt: requirement.closedAt?.toISOString() || null,
+      plannedDays: naturalDays(requirement.plannedStartAt, requirement.dueAt),
+      actualDays: naturalDays(requirement.startedAt, requirement.closedAt || (requirement.startedAt ? now : null)),
+      health: scheduleHealth(requirement, now),
+      progress: allChildren.length ? Math.round(completed / allChildren.length * 100) : null,
+      requester: requirement.requester,
+      tasks: children.map((task) => serializeTask(task, now)),
+    }];
+  });
+  const unassignedTasks = tasks.filter((task) => !task.requirementId && visibleTaskIds.has(task.id)).map((task) => serializeTask(task, now));
+  return NextResponse.json({
+    generatedAt: now.toISOString(),
+    range: { from: from.toISOString(), to: to.toISOString() },
+    permissions: { canWrite: Boolean(access.canManage || (access.projectMember && access.projectMember.role !== "GUEST")) },
+    members: members.map(({ user }) => user),
+    requirements: result,
+    unassignedTasks,
+  });
+}

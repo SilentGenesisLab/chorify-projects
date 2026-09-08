@@ -6,6 +6,7 @@ import { getRequestUserId } from "@/lib/team-permissions";
 import { getProjectAccess } from "@/lib/project-permissions";
 import { nextTaskCompletedAt } from "@/lib/project-overview";
 import { opaqueId, optionalOpaqueId, prepareTaskCreate, taskFieldsSchema } from "@/lib/task-workflow";
+import { nextStartedAt, validateSchedule } from "@/lib/project-schedule";
 
 const optionalId = optionalOpaqueId;
 const schemas = {
@@ -17,6 +18,8 @@ const schemas = {
     status: z.string().trim().min(1).max(30),
     targetVersionId: optionalId,
     participantIds: z.array(opaqueId).default([]),
+    plannedStartAt: z.string().datetime().nullable().optional(),
+    dueAt: z.string().datetime().nullable().optional(),
   }),
   tasks: taskFieldsSchema.extend({ status: taskFieldsSchema.shape.status.default("TODO") }),
   bugs: z.object({
@@ -120,6 +123,10 @@ export async function POST(
       { status: 400 },
     );
   const data = clean(parsed.data as Record<string, unknown>);
+  if (module === "requirements" || module === "tasks") {
+    const scheduleError = validateSchedule(data.plannedStartAt as string | null | undefined, data.dueAt as string | null | undefined);
+    if (scheduleError) return NextResponse.json({ error: scheduleError }, { status: 400 });
+  }
   const participantIds = (data.participantIds || []) as string[];
   const fileIds = (data.fileIds || []) as string[];
   const ownerId = data.ownerId as string | null | undefined;
@@ -148,6 +155,7 @@ export async function POST(
         requester: { connect: { id: userId } },
         targetVersion: targetVersionId ? { connect: { id: targetVersionId as string } } : undefined,
         closedAt: data.status === "DONE" ? new Date() : null,
+        startedAt: nextStartedAt(null, null, String(data.status), "requirement"),
         participants: participantIds.length
           ? { createMany: { data: [...new Set(participantIds)].map((participantId) => ({ userId: participantId })) } }
           : undefined,
@@ -168,6 +176,7 @@ export async function POST(
         completedAt,
         firstCompletedAt: completedAt,
         closedAt: completedAt,
+        startedAt: nextStartedAt(null, null, String(prepared.value.status), "task"),
       } as Prisma.TaskUncheckedCreateInput,
     });
     if ((dependencyIds as string[]).length)

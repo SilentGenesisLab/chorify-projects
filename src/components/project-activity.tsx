@@ -5,6 +5,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ArrowLeft, ArrowRight, Bug, CheckCircle2, Edit3, GitCompareArrows, LoaderCircle, Plus, Rocket, ShieldAlert, Target, X } from "lucide-react";
 import { SelectField } from "@/components/ui/select-field";
+import { ProjectSchedule } from "@/components/project-schedule";
 
 type Member = { id: string; name: string; avatarColor: string };
 type Risk = { id: string; title: string; description: string; severity: string; status: string; ownerId: string | null; mitigation: string; dueAt: string | null; resolvedAt: string | null; owner: Member | null };
@@ -54,6 +55,7 @@ export function ProjectActivity({ projectId }: { projectId: string }) {
       <div className="flex items-center gap-2 sm:ml-auto"><button className="secondary-button px-3" aria-label="上一周" onClick={()=>setWeek(shiftWeek(data.week.key,-1))}><ArrowLeft size={16}/></button><span className="min-w-40 text-center text-sm font-medium">{dateText(data.week.start)} — {dateText(new Date(new Date(data.week.end).getTime()-1).toISOString())}</span><button disabled={data.week.current} className="secondary-button px-3 disabled:opacity-40" aria-label="下一周" onClick={()=>setWeek(shiftWeek(data.week.key,1))}><ArrowRight size={16}/></button></div>
     </header>
     {error&&<div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</div>}
+    <ProjectSchedule projectId={projectId} highlightedWeek={data.week.key}/>
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{cards.map(item=><section className="card p-5" key={item.label}><div className="flex items-start"><span className="grid size-10 place-items-center rounded-xl bg-blue-50 text-blue-600"><item.icon size={19}/></span><strong className="ml-auto max-w-40 truncate text-2xl">{item.value}</strong></div><p className="mt-4 text-sm font-medium">{item.label}</p><p className="mt-1 truncate text-xs text-slate-400">{item.note}</p></section>)}</div>
 
     <div className="grid gap-5 xl:grid-cols-[1.05fr_.95fr]">

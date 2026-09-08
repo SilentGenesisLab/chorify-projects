@@ -564,6 +564,9 @@ model Requirement {
   status             String
   targetVersionId    String?
   requesterId        String?
+  plannedStartAt     DateTime?
+  dueAt              DateTime?
+  startedAt          DateTime?
   closedAt           DateTime?
   project            Project                  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   targetVersion      Version?                 @relation(fields: [targetVersionId], references: [id])
@@ -573,6 +576,9 @@ model Requirement {
   bugs               Bug[]
   createdAt          DateTime                 @default(now())
   updatedAt          DateTime                 @updatedAt
+
+  @@index([projectId, plannedStartAt])
+  @@index([projectId, dueAt])
 }
 
 model RequirementParticipant {
@@ -596,6 +602,8 @@ model Task {
   acceptanceCriteria String
   priority           Priority
   status             TaskStatus       @default(TODO)
+  plannedStartAt     DateTime?
+  startedAt          DateTime?
   dueAt              DateTime?
   closedAt           DateTime?
   completedAt        DateTime?
@@ -625,6 +633,8 @@ model Task {
   @@index([projectId, completedAt])
   @@index([projectId, firstCompletedAt])
   @@index([projectId, closedAt])
+  @@index([projectId, plannedStartAt])
+  @@index([projectId, dueAt])
 }
 
 model TaskDependency {

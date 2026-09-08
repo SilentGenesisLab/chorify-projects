@@ -104,3 +104,5 @@ html[data-theme="dark"] table tbody tr { border-color: #2b3850 !important; }
 html[data-theme="dark"] ::-webkit-scrollbar { width: 10px; height: 10px; }
 html[data-theme="dark"] ::-webkit-scrollbar-track { background: #101a2b; }
 html[data-theme="dark"] ::-webkit-scrollbar-thumb { border: 2px solid #101a2b; border-radius: 8px; background: #42506a; }
+html[data-theme="dark"] .project-schedule [class*="bg-slate-50/"] { background-color: rgba(24,35,55,.72) !important; }
+html[data-theme="dark"] .project-schedule [class*="bg-blue-50/"] { background-color: rgba(23,47,88,.58) !important; }

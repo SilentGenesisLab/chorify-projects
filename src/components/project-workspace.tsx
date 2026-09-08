@@ -456,7 +456,7 @@ function Editor({
     setSaving(true);
     setError("");
     const payload = { ...form };
-    for (const k of ["dueAt", "plannedAt", "releasedAt"])
+    for (const k of ["plannedStartAt", "dueAt", "plannedAt", "releasedAt"])
       if (k in payload)
         payload[k] = iso(payload[k] as string) as unknown as string;
     try {
@@ -675,6 +675,8 @@ function Fields({
       />
       {module === "requirements" && (
         <>
+          <Input label="计划开始" type="datetime-local" value={form.plannedStartAt as string} set={(v) => set("plannedStartAt", v)}/>
+          <Input label="计划完成" type="datetime-local" value={form.dueAt as string} set={(v) => set("dueAt", v)}/>
           <LookupSelect
             label="目标版本"
             value={form.targetVersionId as string}
@@ -692,6 +694,7 @@ function Fields({
       )}
       {module === "tasks" && (
         <>
+          <Input label="计划开始" type="datetime-local" value={form.plannedStartAt as string} set={(v) => set("plannedStartAt", v)}/>
           <LookupSelect
             label="关联需求"
             value={form.requirementId as string}
@@ -837,6 +840,7 @@ function initial(module: Module, item: Item | null): FormState {
     assigneeId: String(d.assigneeId || ""),
     coordinatorId: String(d.coordinatorId || ""),
     acceptorId: String(d.acceptorId || ""),
+    plannedStartAt: dt(d.plannedStartAt),
     dueAt: dt(d.dueAt),
     taskId: String(d.taskId || ""),
     foundVersionId: String(d.foundVersionId || ""),

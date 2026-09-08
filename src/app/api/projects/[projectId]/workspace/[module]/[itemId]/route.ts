@@ -6,18 +6,21 @@ import { getRequestUserId } from "@/lib/team-permissions";
 import { getProjectAccess } from "@/lib/project-permissions";
 import { nextTaskCompletedAt } from "@/lib/project-overview";
 import { opaqueId, optionalOpaqueId, taskPatchSchema, validateTaskReferences, validateTaskStatusTransition } from "@/lib/task-workflow";
+import { nextStartedAt, validateSchedule } from "@/lib/project-schedule";
 
 const ids = optionalOpaqueId;
 const baseSchemas = {
   requirements: z.object({
-    title: z.string().min(2).max(120),
-    description: z.string().max(5000),
-    acceptanceCriteria: z.string().min(2).max(5000),
-    priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]),
-    status: z.string().min(1).max(30),
+    title: z.string().min(2).max(120).optional(),
+    description: z.string().max(5000).optional(),
+    acceptanceCriteria: z.string().min(2).max(5000).optional(),
+    priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]).optional(),
+    status: z.string().min(1).max(30).optional(),
     targetVersionId: ids,
-    participantIds: z.array(opaqueId).default([]),
-  }),
+    participantIds: z.array(opaqueId).optional(),
+    plannedStartAt: z.string().datetime().nullable().optional(),
+    dueAt: z.string().datetime().nullable().optional(),
+  }).refine((value) => Object.keys(value).length > 0, "没有可更新的字段"),
   tasks: taskPatchSchema,
   bugs: z.object({
     title: z.string().min(2).max(120),
@@ -129,6 +132,10 @@ export async function PATCH(
       { status: 400 },
     );
   const data = clean(parsed.data as Record<string, unknown>);
+  if (module === "requirements" || module === "tasks") {
+    const scheduleError = validateSchedule(data.plannedStartAt as string | null | undefined, data.dueAt as string | null | undefined);
+    if (scheduleError) return NextResponse.json({ error: scheduleError }, { status: 400 });
+  }
   const participantIds = (data.participantIds || []) as string[];
   const fileIds = (data.fileIds || []) as string[];
   const ownerId = data.ownerId as string | null | undefined;
@@ -144,14 +151,21 @@ export async function PATCH(
     if (count !== new Set(fileIds).size)
       return NextResponse.json({ error: "只能引用当前项目中有效的文件" }, { status: 400 });
   }
+  let scheduleBefore: { plannedStartAt: Date | null; dueAt: Date | null } | null = null;
   if (module === "tasks") {
     const invalid = await validateTaskReferences(projectId, data, itemId);
     if (invalid) return NextResponse.json({ error: invalid }, { status: 400 });
     const { dependencyIds, ...taskData } = data;
     const existing = await prisma.task.findUnique({
       where: { id: itemId },
-      select: { completedAt: true, firstCompletedAt: true, status: true, assigneeId: true, acceptorId: true },
+      select: { completedAt: true, firstCompletedAt: true, startedAt: true, plannedStartAt: true, dueAt: true, status: true, assigneeId: true, acceptorId: true },
     });
+    const taskScheduleError = validateSchedule(
+      data.plannedStartAt === undefined ? existing?.plannedStartAt?.toISOString() : data.plannedStartAt as string | null,
+      data.dueAt === undefined ? existing?.dueAt?.toISOString() : data.dueAt as string | null,
+    );
+    if (taskScheduleError) return NextResponse.json({ error: taskScheduleError }, { status: 400 });
+    if (data.plannedStartAt !== undefined || data.dueAt !== undefined) scheduleBefore = existing ? { plannedStartAt: existing.plannedStartAt, dueAt: existing.dueAt } : null;
     if (existing && data.status && data.status !== existing.status) {
       const canWrite = Boolean(access.canManage || (access.projectMember && access.projectMember.role !== "GUEST"));
       const transitionError = validateTaskStatusTransition(existing, userId, canWrite, data.status as typeof existing.status);
@@ -167,6 +181,7 @@ export async function PATCH(
           ...taskData,
           completedAt,
           firstCompletedAt: existing?.firstCompletedAt || completedAt,
+          ...(data.status === undefined ? {} : { startedAt: nextStartedAt(existing?.startedAt || null, existing?.status || null, String(data.status), "task") }),
           ...(data.status === undefined ? {} : { closedAt: completedAt }),
         } as Prisma.TaskUncheckedUpdateInput,
       }),
@@ -177,18 +192,27 @@ export async function PATCH(
   } else if (module === "requirements") {
     const { participantIds: _participantIds, ...requirementData } = data;
     void _participantIds;
-    const existing = await prisma.requirement.findUnique({ where: { id: itemId }, select: { closedAt: true } });
+    const existing = await prisma.requirement.findUnique({ where: { id: itemId }, select: { closedAt: true, startedAt: true, plannedStartAt: true, dueAt: true, status: true } });
+    const requirementScheduleError = validateSchedule(
+      data.plannedStartAt === undefined ? existing?.plannedStartAt?.toISOString() : data.plannedStartAt as string | null,
+      data.dueAt === undefined ? existing?.dueAt?.toISOString() : data.dueAt as string | null,
+    );
+    if (requirementScheduleError) return NextResponse.json({ error: requirementScheduleError }, { status: 400 });
+    if (data.plannedStartAt !== undefined || data.dueAt !== undefined) scheduleBefore = existing ? { plannedStartAt: existing.plannedStartAt, dueAt: existing.dueAt } : null;
     await prisma.requirement.update({
       where: { id: itemId },
       data: {
         ...requirementData,
-        closedAt: data.status === "DONE" ? existing?.closedAt || new Date() : null,
-        participants: {
+        ...(data.status === undefined ? {} : {
+          closedAt: data.status === "DONE" ? existing?.closedAt || new Date() : null,
+          startedAt: nextStartedAt(existing?.startedAt || null, existing?.status || null, String(data.status), "requirement"),
+        }),
+        ...(data.participantIds === undefined ? {} : { participants: {
           deleteMany: {},
           ...(participantIds.length
             ? { createMany: { data: [...new Set(participantIds)].map((participantId) => ({ userId: participantId })) } }
             : {}),
-        },
+        } }),
       } as Prisma.RequirementUpdateInput,
     });
   }
@@ -235,7 +259,15 @@ export async function PATCH(
       resource: resources[module as keyof typeof resources],
       resourceId: itemId,
       channel: "WEB",
-      metadata: { projectId, result: "SUCCESS" },
+      metadata: {
+        projectId,
+        result: "SUCCESS",
+        fields: Object.keys(data),
+        ...(scheduleBefore ? { schedule: {
+          from: { plannedStartAt: scheduleBefore.plannedStartAt?.toISOString() || null, dueAt: scheduleBefore.dueAt?.toISOString() || null },
+          to: { plannedStartAt: data.plannedStartAt === undefined ? scheduleBefore.plannedStartAt?.toISOString() || null : data.plannedStartAt, dueAt: data.dueAt === undefined ? scheduleBefore.dueAt?.toISOString() || null : data.dueAt },
+        } } : {}),
+      },
     },
   });
   return NextResponse.json({ ok: true });
