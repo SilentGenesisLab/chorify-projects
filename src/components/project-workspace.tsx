@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Bug,
   ChevronRight,
@@ -16,6 +16,7 @@ import {
   X,
 } from "lucide-react";
 import { SelectField } from "@/components/ui/select-field";
+import { DateRangeField } from "@/components/ui/date-range-field";
 import { DeploymentCenter } from "@/components/deployment-center";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -461,7 +462,13 @@ function Editor({
         : value;
     }),
     [saving, setSaving] = useState(false),
-    [error, setError] = useState("");
+    [error, setError] = useState(""),
+    [drawerWidth, setDrawerWidth] = useState(672);
+  const resize = useRef<{ x: number; width: number } | null>(null);
+  function resizeDrawer(event: ReactPointerEvent<HTMLButtonElement>) {
+    if (!resize.current) return;
+    setDrawerWidth(Math.min(window.innerWidth * .92, Math.max(390, resize.current.width + resize.current.x - event.clientX)));
+  }
   const set = (key: string, value: string | string[]) =>
     setForm((v) => ({ ...v, [key]: value }));
   async function submit(e: FormEvent) {
@@ -494,8 +501,10 @@ function Editor({
     >
       <form
         onSubmit={submit}
-        className="h-full w-full max-w-2xl overflow-y-auto border-l border-slate-200 bg-white p-6 shadow-2xl"
+        style={{ width: `min(100vw, ${drawerWidth}px)` }}
+        className="relative h-full shrink-0 overflow-y-auto border-l border-slate-200 bg-white p-6 shadow-2xl"
       >
+        {module === "requirements" && <button type="button" aria-label="调整需求表单宽度" className="absolute inset-y-0 left-0 hidden w-2 cursor-col-resize touch-none hover:bg-blue-500/20 sm:block" onPointerDown={event=>{resize.current={x:event.clientX,width:drawerWidth};event.currentTarget.setPointerCapture(event.pointerId)}} onPointerMove={resizeDrawer} onPointerUp={()=>{resize.current=null}} />}
         <div className="flex items-start">
           <div>
             <h3 className="text-lg font-semibold">
@@ -688,8 +697,7 @@ function Fields({
       />
       {module === "requirements" && (
         <>
-          <Input label="计划开始" type="datetime-local" value={form.plannedStartAt as string} set={(v) => set("plannedStartAt", v)}/>
-          <Input label="计划完成" type="datetime-local" value={form.dueAt as string} set={(v) => set("dueAt", v)}/>
+          <DateRangeField title="需求排期" includeTime start={form.plannedStartAt as string} end={form.dueAt as string} onChange={value=>{set("plannedStartAt",value.start);set("dueAt",value.end)}} />
           <LookupSelect
             label="目标版本"
             value={form.targetVersionId as string}
