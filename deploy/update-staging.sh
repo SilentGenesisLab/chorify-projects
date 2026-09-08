@@ -17,7 +17,7 @@ sudo docker compose --env-file .env.staging -f "$STAGING_COMPOSE" build migrate 
 sudo docker compose --env-file .env.staging -f "$STAGING_COMPOSE" run --rm migrate
 
 ACTIVE="green"
-[[ -f "$STATE_FILE" ]] && ACTIVE="$(tail -n 1 "$STATE_FILE")"
+[[ -f "$STATE_FILE" ]] && ACTIVE="$(tail -n 1 "$STATE_FILE" | tr -d '\r[:space:]')"
 [[ "$ACTIVE" == "blue" || "$ACTIVE" == "green" ]] || ACTIVE="green"
 if [[ "$ACTIVE" == "blue" ]]; then TARGET="green"; HOST_PORT="3309"; else TARGET="blue"; HOST_PORT="3308"; fi
 
