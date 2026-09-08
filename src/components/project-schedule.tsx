@@ -31,13 +31,15 @@ function diffDays(left: Date | string, right: Date | string) { return Math.round
 function iso(value: string) { return value ? dateFromKey(value).toISOString() : null; }
 function monthText(value: Date) { return new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", year: "numeric", month: "long" }).format(value); }
 
+/* eslint-disable react-hooks/refs -- pointer sessions must be synchronous; every ref access below occurs inside a pointer/click handler, never during render. */
 export function ProjectSchedule({ projectId, highlightedWeek }: { projectId: string; highlightedWeek: string }) {
   const [zoom, setZoom] = useState<ScheduleZoom>("month");
   const [anchor, setAnchor] = useState(() => schedulePeriod(new Date(), "month").start);
-  const [data, setData] = useState<ScheduleData | null>(null), [loading, setLoading] = useState(true), [error, setError] = useState("");
+  const [data, setData] = useState<ScheduleData | null>(null), [loading, setLoading] = useState(true), [error, setError] = useState(""), [notice, setNotice] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(new Set()), [showUnscheduled, setShowUnscheduled] = useState(true);
   const [statusFilter,setStatusFilter]=useState("ALL"),[ownerFilter,setOwnerFilter]=useState("ALL");
   const [drag, setDrag] = useState<Drag | null>(null), [editor, setEditor] = useState<Row | null>(null), [detail, setDetail] = useState<ScheduleRequirement | null>(null);
+  const dragRef = useRef<Drag | null>(null);
   const dragged = useRef(false);
   const [listWidth,setListWidth]=useState(320),listResize=useRef<{x:number;width:number}|null>(null);
   const period = useMemo(() => schedulePeriod(anchor, zoom), [anchor, zoom]);
@@ -75,14 +77,34 @@ export function ProjectSchedule({ projectId, highlightedWeek }: { projectId: str
 
   function beginDrag(event: ReactPointerEvent, row: Row, mode: Drag["mode"]) {
     if (!data?.permissions.canWrite || !row.item.plannedStartAt || !row.item.dueAt) return;
+    setError(""); setNotice("");
     event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId); dragged.current = false;
-    setDrag({ id: row.item.id, kind: row.kind, mode, originX: event.clientX, delta: 0 });
+    const next = { id: row.item.id, kind: row.kind, mode, originX: event.clientX, delta: 0 } satisfies Drag;
+    dragRef.current = next;
+    setDrag(next);
   }
   function resizeList(event:ReactPointerEvent<HTMLButtonElement>){if(!listResize.current)return;setListWidth(Math.min(560,Math.max(280,listResize.current.width+event.clientX-listResize.current.x)))}
-  function moveDrag(event: ReactPointerEvent) { if (drag) { const delta=Math.round((event.clientX-drag.originX)/config.cell);if(delta)dragged.current=true;setDrag({...drag,delta}); } }
+  function moveDrag(event: ReactPointerEvent) {
+    const current = dragRef.current;
+    if (!current) return;
+    const delta = Math.round((event.clientX-current.originX)/config.cell);
+    if (delta) dragged.current = true;
+    if (delta === current.delta) return;
+    const next = { ...current, delta };
+    dragRef.current = next;
+    setDrag(next);
+  }
+  function cancelDrag() {
+    dragRef.current = null;
+    setDrag(null);
+    dragged.current = false;
+  }
   async function finishDrag(row: Row) {
-    if (!drag || drag.id !== row.item.id || !row.item.plannedStartAt || !row.item.dueAt) return setDrag(null);
-    const delta = drag.delta, mode = drag.mode; setDrag(null);
+    const current = dragRef.current;
+    dragRef.current = null;
+    setDrag(null);
+    if (!current || current.id !== row.item.id || !row.item.plannedStartAt || !row.item.dueAt) return;
+    const delta = current.delta, mode = current.mode;
     if (!delta) return;
     let start = dateFromKey(key(row.item.plannedStartAt)), due = dateFromKey(key(row.item.dueAt));
     if (mode !== "end") start = addDays(start, delta);
@@ -91,8 +113,8 @@ export function ProjectSchedule({ projectId, highlightedWeek }: { projectId: str
     try {
       const resourceModule = row.kind === "requirement" ? "requirements" : "tasks";
       const response = await fetch(`/api/projects/${projectId}/workspace/${resourceModule}/${row.item.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ plannedStartAt: start.toISOString(), dueAt: due.toISOString() }) });
-      const body = await response.json(); if (!response.ok) throw new Error(body.error || "保存排期失败"); await load();
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "保存排期失败"); }
+      const body = await response.json(); if (!response.ok) throw new Error(body.error || "保存排期失败"); await load(); setNotice("排期已更新");
+    } catch (cause) { setNotice(""); setError(cause instanceof Error ? cause.message : "保存排期失败"); }
   }
   function displayDates(row: Row) {
     if (!drag || drag.id !== row.item.id || !row.item.plannedStartAt || !row.item.dueAt) return { start: row.item.plannedStartAt, due: row.item.dueAt };
@@ -113,6 +135,7 @@ export function ProjectSchedule({ projectId, highlightedWeek }: { projectId: str
       <SchedulePeriodControl anchor={period.start} zoom={zoom} onPrevious={()=>setAnchor(shiftSchedulePeriod(period.start,zoom,-1))} onToday={()=>setAnchor(schedulePeriod(new Date(),zoom).start)} onNext={()=>setAnchor(shiftSchedulePeriod(period.start,zoom,1))} onZoom={value=>{const now=new Date(),focus=now>=period.start&&now<period.end?now:period.start;setZoom(value);setAnchor(schedulePeriod(focus,value).start)}}/>
     </div>
     {error&&<div role="alert" className="border-b border-rose-100 bg-rose-50 px-5 py-3 text-sm text-rose-700">{error}</div>}
+    {notice&&<div role="status" className="border-b border-emerald-100 bg-emerald-50 px-5 py-3 text-sm text-emerald-700">{notice}</div>}
     <div className="overflow-x-auto">
       <div className="grid min-w-max" style={{ gridTemplateColumns: `${listWidth}px ${width}px` }}>
         <div className="sticky left-0 z-30 flex items-center border-b border-r border-slate-200 bg-slate-50 px-4 py-4 text-xs font-semibold text-slate-500">工作项 / 负责人 / 状态<button type="button" aria-label="调整工作项列表宽度" title="左右拖动调整列表宽度" className="absolute inset-y-0 right-0 w-2 cursor-col-resize touch-none hover:bg-blue-500/20" onPointerDown={event=>{listResize.current={x:event.clientX,width:listWidth};event.currentTarget.setPointerCapture(event.pointerId)}} onPointerMove={resizeList} onPointerUp={()=>{listResize.current=null}}/></div>
@@ -130,19 +153,20 @@ export function ProjectSchedule({ projectId, highlightedWeek }: { projectId: str
               {row.kind==="task"&&<GripVertical size={13} className="mr-2 shrink-0 text-slate-300"/>}<span className="min-w-0 flex-1"><span className="block whitespace-normal break-words text-xs font-medium leading-5">{row.item.code} · {row.item.title}</span><span className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[10px] text-slate-400"><span>{row.kind==="requirement"?(row.item as ScheduleRequirement).requester?.name||"未指定提出者":(row.item as ScheduleTask).assignee?.name||"未分配"}</span><span>·</span><span>{statusLabels[row.item.status]||row.item.status}</span>{row.item.plannedDays&&<><span>·</span><span>{row.item.plannedDays}天</span></>}</span></span>
               <span className={`ml-auto shrink-0 rounded-full px-2 py-1 text-[10px] ${healthClass[row.item.health]||healthClass.UNSCHEDULED}`}>{healthLabels[row.item.health]||row.item.health}</span>
             </button>
-            <div className="relative min-h-14 overflow-hidden border-b border-slate-100" style={{width}} onPointerMove={moveDrag} onPointerUp={()=>void finishDrag(row)}>
+            <div className="relative min-h-14 overflow-hidden border-b border-slate-100" style={{width}} onPointerMove={moveDrag} onPointerUp={()=>void finishDrag(row)} onPointerCancel={cancelDrag}>
               <Grid days={days} cell={config.cell}/>{highlightLeft<width&&highlightLeft+7*config.cell>0&&<div className="absolute inset-y-0 bg-blue-50/60" style={{left:Math.max(0,highlightLeft),width:Math.min(width-Math.max(0,highlightLeft),7*config.cell)}}/>}{todayLeft>=0&&todayLeft<width&&<div className="absolute inset-y-0 z-10 w-px bg-blue-500" style={{left:todayLeft+config.cell/2}}/>}
-              {start!==null&&due!==null?<div title={req?"点击查看需求，拖动调整排期":"拖动调整排期，拖动两端改变起止日期"} className={`absolute top-1/2 z-20 flex h-8 -translate-y-1/2 items-center overflow-hidden rounded-lg text-[10px] text-white shadow-sm ${row.kind==="requirement"?"cursor-pointer bg-blue-600":"bg-sky-500"} ${row.item.health==="OVERDUE"?"bg-rose-500":row.item.health==="AT_RISK"?"bg-amber-500":""}`} style={{left,width:barWidth}} onPointerDown={event=>beginDrag(event,row,"move")} onClick={()=>{if(req&&!dragged.current)setDetail(req);dragged.current=false}}>
+              {start!==null&&due!==null?<div title={req?"点击查看需求，拖动调整排期":"拖动调整排期，拖动两端改变起止日期"} className={`absolute top-1/2 z-20 flex h-8 touch-none -translate-y-1/2 select-none items-center overflow-hidden rounded-lg text-[10px] text-white shadow-sm ${row.kind==="requirement"?"cursor-pointer bg-blue-600":"bg-sky-500"} ${row.item.health==="OVERDUE"?"bg-rose-500":row.item.health==="AT_RISK"?"bg-amber-500":""}`} style={{left,width:barWidth}} onPointerDown={event=>beginDrag(event,row,"move")} onClick={()=>{if(req&&!dragged.current)setDetail(req);dragged.current=false}}>
                 {data?.permissions.canWrite&&<span className="absolute inset-y-0 left-0 w-2 cursor-ew-resize bg-black/10" onPointerDown={event=>{event.stopPropagation();beginDrag(event,row,"start")}}/>}<span className="truncate px-3">{req?.progress!==null&&req?.progress!==undefined?`${req.progress}%`:statusLabels[row.item.status]||row.item.status}</span>{(row.item as ScheduleTask).dependencyConflict&&<AlertTriangle size={13} className="ml-auto mr-2 shrink-0"/>}{data?.permissions.canWrite&&<span className="absolute inset-y-0 right-0 w-2 cursor-ew-resize bg-black/10" onPointerDown={event=>{event.stopPropagation();beginDrag(event,row,"end")}}/>}
-              </div>:<button onClick={()=>setEditor(row)} className="absolute left-3 top-1/2 z-20 -translate-y-1/2 text-[11px] text-slate-400 hover:text-blue-600">+ 设置排期</button>}
+              </div>:<button disabled={!data?.permissions.canWrite} title={data?.permissions.canWrite?"设置开始与结束日期":"你没有调整排期的权限"} onClick={()=>setEditor(row)} className="absolute left-3 top-1/2 z-20 -translate-y-1/2 text-[11px] text-slate-400 hover:text-blue-600 disabled:cursor-not-allowed disabled:hover:text-slate-400">{data?.permissions.canWrite?"+ 设置排期":"暂无排期"}</button>}
             </div>
           </div>})}
       </div>
     </div>
-    {editor&&<ScheduleDialog projectId={projectId} row={editor} canWrite={Boolean(data?.permissions.canWrite)} onClose={()=>setEditor(null)} onSaved={async()=>{setEditor(null);await load()}}/>}
+    {editor&&<ScheduleDialog projectId={projectId} row={editor} canWrite={Boolean(data?.permissions.canWrite)} onClose={()=>setEditor(null)} onSaved={async()=>{setEditor(null);await load();setNotice("排期已更新")}}/>}
     {detail&&<RequirementScheduleDetail projectId={projectId} requirement={detail} canWrite={Boolean(data?.permissions.canWrite)} onClose={()=>setDetail(null)} onEdit={()=>{setEditor({kind:"requirement",item:detail,depth:0});setDetail(null)}}/>}
   </section>;
 }
+/* eslint-enable react-hooks/refs */
 
 function Grid({days,cell}:{days:Date[];cell:number}) { return <div className="absolute inset-0 flex">{days.map(day=><div key={key(day)} style={{width:cell}} className={`h-full shrink-0 border-r border-slate-100 ${weekday(day)===0||weekday(day)===6?"bg-slate-50":""}`}/>)}</div>; }
 
