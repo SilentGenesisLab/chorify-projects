@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createsDependencyCycle, hasDependencyConflict, naturalDays, nextStartedAt, scheduleHealth, validateSchedule } from "./project-schedule";
+import { createsDependencyCycle, hasDependencyConflict, naturalDays, nextStartedAt, scheduleHealth, schedulePeriod, shiftSchedulePeriod, validateSchedule } from "./project-schedule";
 
 describe("project schedule", () => {
   it("counts inclusive Shanghai natural days across weeks, months and years", () => {
@@ -29,5 +29,27 @@ describe("project schedule", () => {
   it("detects indirect dependency cycles", () => {
     expect(createsDependencyCycle("a", ["b"], [{ taskId: "b", dependsOnId: "c" }, { taskId: "c", dependsOnId: "a" }])).toBe(true);
     expect(createsDependencyCycle("a", ["b"], [{ taskId: "b", dependsOnId: "c" }])).toBe(false);
+  });
+
+  it("uses Monday through Sunday for the weekly period", () => {
+    const period = schedulePeriod("2026-09-08T10:00:00+08:00", "week");
+    expect(period.days).toBe(7);
+    expect(period.start.toISOString()).toBe("2026-09-06T16:00:00.000Z");
+    expect(period.end.toISOString()).toBe("2026-09-13T16:00:00.000Z");
+  });
+
+  it("uses exact calendar-month boundaries, including leap years", () => {
+    expect(schedulePeriod("2028-02-15T10:00:00+08:00", "month").days).toBe(29);
+    expect(schedulePeriod("2027-02-15T10:00:00+08:00", "month").days).toBe(28);
+    expect(schedulePeriod("2026-04-15T10:00:00+08:00", "month").days).toBe(30);
+    expect(schedulePeriod("2026-12-15T10:00:00+08:00", "month").end.toISOString()).toBe("2026-12-31T16:00:00.000Z");
+  });
+
+  it("uses natural-quarter boundaries and shifts whole periods", () => {
+    const quarter = schedulePeriod("2026-09-08T10:00:00+08:00", "quarter");
+    expect(quarter.start.toISOString()).toBe("2026-06-30T16:00:00.000Z");
+    expect(quarter.end.toISOString()).toBe("2026-09-30T16:00:00.000Z");
+    expect(schedulePeriod(shiftSchedulePeriod("2026-12-08", "month", 1), "month").start.toISOString()).toBe("2026-12-31T16:00:00.000Z");
+    expect(schedulePeriod(shiftSchedulePeriod("2026-12-08", "quarter", 1), "quarter").start.toISOString()).toBe("2026-12-31T16:00:00.000Z");
   });
 });

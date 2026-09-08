@@ -227,16 +227,29 @@ export function ProjectWorkspace({
       const b = await r.json();
       if (!r.ok) throw new Error(b.error || "加载失败");
       setData(b);
+      if (module === "requirements") {
+        const itemId = new URL(window.location.href).searchParams.get("item");
+        const item = itemId ? (b as Data).requirements.find((requirement) => requirement.id === itemId) : null;
+        if (item) setDialog({ module: "requirements", item });
+      }
       setError("");
     } catch (e) {
       setError(e instanceof Error ? e.message : "加载失败");
     } finally {
       setLoading(false);
     }
-  }, [projectId]);
+  }, [module, projectId]);
   useEffect(() => {
     void Promise.resolve().then(load);
   }, [load]);
+  function closeDialog() {
+    const url = new URL(window.location.href);
+    if (url.searchParams.has("item")) {
+      url.searchParams.delete("item");
+      window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+    }
+    setDialog(null);
+  }
   const active: Module = module;
   const items = data[active];
   const info = moduleInfo[active];
@@ -415,9 +428,9 @@ export function ProjectWorkspace({
           module={dialog.module}
           item={dialog.item}
           data={data}
-          onClose={() => setDialog(null)}
+          onClose={closeDialog}
           onSaved={async () => {
-            setDialog(null);
+            closeDialog();
             await load();
           }}
         />

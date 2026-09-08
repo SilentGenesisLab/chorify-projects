@@ -56,7 +56,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const [requirements, rawTasks, members] = await Promise.all([
     prisma.requirement.findMany({
       where: { projectId },
-      include: { requester: { select: { id: true, name: true, avatarColor: true } } },
+      include: {
+        requester: { select: { id: true, name: true, avatarColor: true } },
+        participants: { include: { user: { select: { id: true, name: true, avatarColor: true } } } },
+        targetVersion: { select: { id: true, name: true } },
+      },
       orderBy: [{ plannedStartAt: "asc" }, { createdAt: "asc" }],
     }),
     loadTasks(projectId),
@@ -84,6 +88,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       title: requirement.title,
       status: requirement.status,
       priority: requirement.priority,
+      description: requirement.description,
+      acceptanceCriteria: requirement.acceptanceCriteria,
       plannedStartAt: requirement.plannedStartAt?.toISOString() || null,
       dueAt: requirement.dueAt?.toISOString() || null,
       startedAt: requirement.startedAt?.toISOString() || null,
@@ -93,6 +99,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       health: scheduleHealth(requirement, now),
       progress: allChildren.length ? Math.round(completed / allChildren.length * 100) : null,
       requester: requirement.requester,
+      participants: requirement.participants.map(({ user }) => user),
+      targetVersion: requirement.targetVersion,
       tasks: children.map((task) => serializeTask(task, now)),
     }];
   });

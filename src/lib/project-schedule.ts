@@ -1,4 +1,5 @@
 const DAY_MS = 86_400_000;
+export type ScheduleZoom = "week" | "month" | "quarter";
 export const TERMINAL_TASK_STATUSES = new Set(["ACCEPTED", "DONE"]);
 export const ACTIVE_REQUIREMENT_STATUSES = new Set(["DEVELOPING", "IN_PROGRESS"]);
 
@@ -15,6 +16,44 @@ function calendarDate(value: Date | string) {
 export function naturalDays(start: Date | string | null, end: Date | string | null) {
   if (!start || !end) return null;
   return Math.max(1, Math.round((calendarDate(end) - calendarDate(start)) / DAY_MS) + 1);
+}
+
+function fromShanghaiParts(year: number, month: number, day = 1) {
+  return new Date(`${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}T00:00:00+08:00`);
+}
+
+function dateParts(value: Date | string) {
+  const [year, month, day] = shanghaiDateKey(value).split("-").map(Number);
+  return { year, month, day };
+}
+
+export function schedulePeriod(value: Date | string, zoom: ScheduleZoom) {
+  const { year, month, day } = dateParts(value);
+  if (zoom === "week") {
+    const calendar = new Date(Date.UTC(year, month - 1, day));
+    const mondayOffset = (calendar.getUTCDay() + 6) % 7;
+    calendar.setUTCDate(calendar.getUTCDate() - mondayOffset);
+    const start = fromShanghaiParts(calendar.getUTCFullYear(), calendar.getUTCMonth() + 1, calendar.getUTCDate());
+    return { start, end: new Date(start.getTime() + 7 * DAY_MS), days: 7 };
+  }
+  if (zoom === "month") {
+    const start = fromShanghaiParts(year, month);
+    const next = month === 12 ? fromShanghaiParts(year + 1, 1) : fromShanghaiParts(year, month + 1);
+    return { start, end: next, days: Math.round((next.getTime() - start.getTime()) / DAY_MS) };
+  }
+  const firstMonth = Math.floor((month - 1) / 3) * 3 + 1;
+  const start = fromShanghaiParts(year, firstMonth);
+  const next = firstMonth === 10 ? fromShanghaiParts(year + 1, 1) : fromShanghaiParts(year, firstMonth + 3);
+  return { start, end: next, days: Math.round((next.getTime() - start.getTime()) / DAY_MS) };
+}
+
+export function shiftSchedulePeriod(value: Date | string, zoom: ScheduleZoom, amount: number) {
+  const period = schedulePeriod(value, zoom);
+  const { year, month } = dateParts(period.start);
+  if (zoom === "week") return new Date(period.start.getTime() + amount * 7 * DAY_MS);
+  const monthDelta = zoom === "month" ? amount : amount * 3;
+  const target = new Date(Date.UTC(year, month - 1 + monthDelta, 1));
+  return fromShanghaiParts(target.getUTCFullYear(), target.getUTCMonth() + 1);
 }
 
 export function scheduleHealth(input: { status: string; dueAt: Date | null; closedAt: Date | null }, now = new Date()) {
