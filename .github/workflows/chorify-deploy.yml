@@ -118,7 +118,7 @@ jobs:
           IMAGE_REF: ${{ steps.image.outputs.image_ref }}
           IMAGE_DIGEST: ${{ steps.image.outputs.image_digest }}
         run: |
-          for STEP in checkout test build; do
+          for STEP in checkout dependencies test build; do
             curl -fsS -X POST "$CALLBACK_URL/api/internal/deployments/$RUN_ID/events" \
               -H "Content-Type: application/json" -H "X-Chorify-Deploy-Secret: $CALLBACK_SECRET" \
               -d "$(jq -n --arg status BUILDING --arg step "$STEP" --arg stepStatus SUCCEEDED --arg serviceId "$SERVICE_ID" --arg githubRunId "$GITHUB_RUN_ID" --arg imageRef "$IMAGE_REF" --arg imageDigest "$IMAGE_DIGEST" '{status:$status,step:$step,stepStatus:$stepStatus,serviceId:$serviceId,githubRunId:$githubRunId,imageRef:$imageRef,imageDigest:$imageDigest}')"
@@ -175,7 +175,7 @@ jobs:
           SLOT="$(printf '%s' "$RESULT" | jq -r '.activeSlot')"
           PREVIOUS="$(printf '%s' "$RESULT" | jq -r '.previousSlot')"
           LATENCY="$(printf '%s' "$RESULT" | jq -r '.latencyMs')"
-          STEPS="migration deploy health switch observe"
+          STEPS="preload migration deploy health switch observe"
           [[ "${{ inputs.mode }}" == "rollback" ]] && STEPS="deploy health switch observe"
           for STEP in $STEPS; do
             STATUS=VERIFYING
@@ -193,4 +193,4 @@ jobs:
           [[ "${{ job.status }}" == "cancelled" ]] && ERROR="GitHub Actions 已取消，流量未切换"
           curl -sS -X POST "$CALLBACK_URL/api/internal/deployments/$RUN_ID/events" \
             -H "Content-Type: application/json" -H "X-Chorify-Deploy-Secret: $CALLBACK_SECRET" \
-            -d "$(jq -n --arg status FAILED --arg step deploy --arg stepStatus FAILED --arg serviceId "$SERVICE_ID" --arg githubRunId "$GITHUB_RUN_ID" --arg githubRunUrl "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --arg error "$ERROR" '{status:$status,step:$step,stepStatus:$stepStatus,serviceId:$serviceId,githubRunId:$githubRunId,githubRunUrl:$githubRunUrl,error:$error}')"
+            -d "$(jq -n --arg status FAILED --arg serviceId "$SERVICE_ID" --arg githubRunId "$GITHUB_RUN_ID" --arg githubRunUrl "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --arg error "$ERROR" '{status:$status,serviceId:$serviceId,githubRunId:$githubRunId,githubRunUrl:$githubRunUrl,error:$error}')"

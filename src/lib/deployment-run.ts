@@ -2,6 +2,8 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { dispatchDeployment } from "@/lib/github-app";
 import { DEPLOYMENT_STEPS, deploymentHealthStatus } from "@/lib/deployment";
+import { githubRunDiagnostics } from "@/lib/github-app";
+import { deliverPendingDeploymentNotifications, enqueueDeploymentNotification } from "@/lib/deployment-notifications";
 
 export const deploymentInclude = {
   version: { select: { id: true, name: true, status: true } },
@@ -139,7 +141,7 @@ export async function dispatchRollbackRun(runId: string) {
             key,
             name,
             sortOrder,
-            status: ["checkout", "test", "build", "migration"].includes(key) ? "SKIPPED" : "PENDING",
+            status: ["checkout", "dependencies", "test", "build", "preload", "migration"].includes(key) ? "SKIPPED" : "PENDING",
           })),
           skipDuplicates: true,
         },
@@ -198,6 +200,7 @@ export async function checkDeploymentEnvironment(environmentId: string, deployme
   }
   const next = deploymentHealthStatus(environment.consecutiveFailures, ok);
   const latencyMs = Date.now() - started;
+  const previousStatus = environment.healthStatus;
   const [health] = await prisma.$transaction([
     prisma.environmentHealthCheck.create({
       data: {
@@ -218,12 +221,55 @@ export async function checkDeploymentEnvironment(environmentId: string, deployme
       },
     }),
   ]);
+  const project = await prisma.project.findUnique({ where: { id: environment.projectId }, select: { name: true } });
+  if (next.status === "DOWN" && previousStatus !== "DOWN") {
+    await enqueueDeploymentNotification({ projectId: environment.projectId, environmentId, deploymentRunId, eventKey: `environment:${environmentId}:down:${health.id}`, type: "ENVIRONMENT_DOWN", payload: { title: "部署环境已掉线", content: error || `连续 ${next.consecutiveFailures} 次健康检查失败`, color: "red", projectName: project?.name, environmentName: environment.name, environmentUrl: environment.url } });
+  } else if (next.status === "HEALTHY" && previousStatus === "DOWN") {
+    await enqueueDeploymentNotification({ projectId: environment.projectId, environmentId, deploymentRunId, eventKey: `environment:${environmentId}:recovered:${health.id}`, type: "ENVIRONMENT_RECOVERED", payload: { title: "部署环境已恢复", content: `健康检查恢复正常，响应 ${latencyMs}ms`, color: "green", projectName: project?.name, environmentName: environment.name, environmentUrl: environment.url } });
+  }
   return health;
 }
 
 export async function failDeployment(runId: string, reason: string, status: "FAILED" | "ROLLED_BACK" = "FAILED") {
-  return prisma.deploymentRun.update({
-    where: { id: runId },
+  return prisma.deploymentRun.updateMany({
+    where: { id: runId, failureStepKey: null },
     data: { status, failureReason: reason, finishedAt: new Date(), lockKey: null },
   });
+}
+
+export async function reconcileGithubFailure(runId: string, githubRunId: string) {
+  const run = await prisma.deploymentRun.findUnique({
+    where: { id: runId },
+    include: {
+      project: { select: { name: true } },
+      environment: true,
+      version: { select: { name: true } },
+      initiatedBy: { select: { name: true } },
+      artifacts: { include: { service: { include: { repository: true } } } },
+    },
+  });
+  const repository = run?.artifacts[0]?.service.repository;
+  if (!run || !repository) return null;
+  const diagnostics = await githubRunDiagnostics(repository.owner, repository.name, repository.installationId, githubRunId);
+  const stepName = DEPLOYMENT_STEPS.find(([key]) => key === diagnostics.failureStepKey)?.[1] || diagnostics.failedStepName || "流水线";
+  const reason = `${stepName}失败${diagnostics.exitCode == null ? "" : `（exit code ${diagnostics.exitCode}）`}`;
+  const precedence: Record<string, number> = { failure: 3, success: 2, skipped: 1 };
+  const outcomes = new Map<string, string>();
+  for (const step of diagnostics.steps) {
+    if (!step.key || !step.conclusion) continue;
+    if ((precedence[step.conclusion] || 0) > (precedence[outcomes.get(step.key) || ""] || 0)) outcomes.set(step.key, step.conclusion);
+  }
+  await prisma.$transaction(async (tx) => {
+    for (const [key, conclusion] of outcomes) {
+      await tx.deploymentStep.updateMany({
+        where: { deploymentRunId: run.id, key },
+        data: { status: conclusion === "failure" ? "FAILED" : conclusion === "success" ? "SUCCEEDED" : "SKIPPED", logsUrl: run.githubRunUrl, finishedAt: new Date() },
+      });
+    }
+    await tx.deploymentRun.update({ where: { id: run.id }, data: { status: "FAILED", failureReason: reason, failureStepKey: diagnostics.failureStepKey, failureDetails: diagnostics as unknown as Prisma.InputJsonValue, finishedAt: new Date(), lockKey: null } });
+    await tx.release.updateMany({ where: { deploymentRunId: run.id }, data: { status: "FAILED", notes: reason, releasedAt: new Date() } });
+  });
+  await enqueueDeploymentNotification({ projectId: run.projectId, environmentId: run.environmentId, deploymentRunId: run.id, eventKey: `deployment:${run.id}:failed`, type: "DEPLOYMENT_FAILED", payload: { title: "项目发布失败", content: diagnostics.annotation || reason, color: "red", projectName: run.project.name, environmentName: run.environment.name, versionName: run.version.name, failureStep: stepName, operatorName: run.initiatedBy.name, environmentUrl: run.environment.url, actionsUrl: run.githubRunUrl || undefined } });
+  await deliverPendingDeploymentNotifications(1).catch(() => undefined);
+  return diagnostics;
 }

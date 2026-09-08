@@ -3,11 +3,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { shouldApplyDeploymentStepEvent } from "@/lib/deployment";
+import { DEPLOYMENT_STEPS, shouldApplyDeploymentStepEvent } from "@/lib/deployment";
+import { enqueueDeploymentNotification } from "@/lib/deployment-notifications";
 
 const schema = z.object({
   status: z.enum(["BUILDING", "DEPLOYING", "VERIFYING", "SUCCEEDED", "FAILED", "ROLLED_BACK"]),
-  step: z.enum(["checkout", "test", "build", "migration", "deploy", "health", "switch", "observe"]).optional(),
+  step: z.enum(["checkout", "dependencies", "test", "build", "preload", "migration", "deploy", "health", "switch", "observe"]).optional(),
   stepStatus: z.enum(["RUNNING", "SUCCEEDED", "FAILED", "SKIPPED"]).optional(),
   serviceId: z.string().min(1).optional(),
   githubRunId: z.string().max(40).optional(),
@@ -40,12 +41,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     where: { id: runId },
     include: {
       environment: true,
+      project: { select: { name: true } },
+      initiatedBy: { select: { name: true } },
       version: { include: { components: { where: { service: { enabled: true } } } } },
       artifacts: true,
       rollbackOf: { include: { artifacts: { include: { service: true } } } },
     },
   });
   if (!run) return NextResponse.json({ error: "发布任务不存在" }, { status: 404 });
+  if (run.status === "FAILED" && input.status === "FAILED" && run.failureStepKey && !input.step)
+    return NextResponse.json({ ok: true, ignored: true, reason: "保留更精确的失败诊断" });
   if (["FAILED", "ROLLED_BACK", "CANCELLED"].includes(run.status) && input.status !== run.status)
     return NextResponse.json({ ok: true, ignored: true });
 
@@ -77,10 +82,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (input.status === "FAILED" || input.status === "ROLLED_BACK") {
     const finalStatus = input.status;
     await prisma.$transaction([
-      prisma.deploymentRun.update({ where: { id: run.id }, data: { status: finalStatus, failureReason: input.error || (finalStatus === "ROLLED_BACK" ? "健康检查失败，已自动回滚" : "流水线执行失败"), githubRunId: input.githubRunId, githubRunUrl: input.githubRunUrl, activeSlot: input.activeSlot, previousSlot: input.previousSlot, finishedAt: new Date(), lockKey: null } }),
+      prisma.deploymentRun.update({ where: { id: run.id }, data: { status: finalStatus, failureReason: input.error || (finalStatus === "ROLLED_BACK" ? "健康检查失败，已自动回滚" : "流水线执行失败"), failureStepKey: input.step, failureDetails: input.output as Prisma.InputJsonValue | undefined, githubRunId: input.githubRunId, githubRunUrl: input.githubRunUrl, activeSlot: input.activeSlot, previousSlot: input.previousSlot, finishedAt: new Date(), lockKey: null } }),
       prisma.release.upsert({ where: { deploymentRunId: run.id }, create: { projectId: run.projectId, versionId: run.versionId, deploymentRunId: run.id, build: input.githubRunId || run.id, environment: run.environment.name, notes: input.error || "发布失败", rollbackPlan: "使用上一健康镜像 digest 回切", status: finalStatus, releasedAt: new Date(), isLegacy: false }, update: { status: finalStatus, notes: input.error || "发布失败", releasedAt: new Date() } }),
       prisma.auditLog.create({ data: { projectId: run.projectId, actorType: "SYSTEM", action: finalStatus === "ROLLED_BACK" ? "AUTO_ROLLBACK_DEPLOYMENT" : "FAIL_DEPLOYMENT", resource: "DEPLOYMENT", resourceId: run.id, channel: "SYSTEM", metadata: { error: input.error, githubRunId: input.githubRunId, result: finalStatus } } }),
     ]);
+    await enqueueDeploymentNotification({ projectId: run.projectId, environmentId: run.environmentId, deploymentRunId: run.id, eventKey: `deployment:${run.id}:${finalStatus === "ROLLED_BACK" ? "auto-rollback" : "failed"}`, type: finalStatus === "ROLLED_BACK" ? "AUTO_ROLLBACK" : "DEPLOYMENT_FAILED", payload: { title: finalStatus === "ROLLED_BACK" ? "发布异常，已自动回滚" : "项目发布失败", content: input.error || "请打开 GitHub Actions 查看失败详情", color: "red", projectName: run.project.name, environmentName: run.environment.name, versionName: run.version.name, failureStep: input.step ? DEPLOYMENT_STEPS.find(([key]) => key === input.step)?.[1] : undefined, operatorName: run.initiatedBy.name, environmentUrl: run.environment.url, actionsUrl: input.githubRunUrl } });
     return NextResponse.json({ ok: true, status: finalStatus });
   }
   if (input.status !== "SUCCEEDED") {
@@ -104,5 +110,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   ]);
   if (input.latencyMs !== undefined)
     await prisma.environmentHealthCheck.create({ data: { environmentId: run.environmentId, deploymentRunId: run.id, status: "HEALTHY", statusCode: 200, latencyMs: input.latencyMs } });
+  await enqueueDeploymentNotification({ projectId: run.projectId, environmentId: run.environmentId, deploymentRunId: run.id, eventKey: `deployment:${run.id}:succeeded`, type: "DEPLOYMENT_SUCCEEDED", payload: { title: "项目发布成功", content: `已切换至 ${input.activeSlot || "新"} 实例并通过稳定性观察`, color: "green", projectName: run.project.name, environmentName: run.environment.name, versionName: run.version.name, operatorName: run.initiatedBy.name, environmentUrl: run.environment.url, actionsUrl: input.githubRunUrl } });
   return NextResponse.json({ ok: true, status: "SUCCEEDED" });
 }

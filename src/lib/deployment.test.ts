@@ -4,6 +4,7 @@ import {
   deploymentHealthStatus,
   deploymentManifestHash,
   migrationRisk,
+  invalidDeploymentText,
   shouldApplyDeploymentStepEvent,
   verifyWebhookSignature,
 } from "@/lib/deployment";
@@ -57,5 +58,11 @@ describe("deployment rules", () => {
     expect(shouldApplyDeploymentStepEvent("ROLLBACK", "migration")).toBe(false);
     expect(shouldApplyDeploymentStepEvent("ROLLBACK", "deploy")).toBe(true);
     expect(shouldApplyDeploymentStepEvent("DEPLOY", "checkout")).toBe(true);
+  });
+
+  it("rejects replacement characters in deployment configuration", () => {
+    expect(invalidDeploymentText("预发布")).toBe(false);
+    expect(invalidDeploymentText("���")).toBe(true);
+    expect(invalidDeploymentText("锟斤拷")).toBe(true);
   });
 });

@@ -11,8 +11,10 @@ export const ACTIVE_DEPLOYMENT_STATUSES = [
 
 export const DEPLOYMENT_STEPS = [
   ["checkout", "检出代码"],
+  ["dependencies", "安装依赖"],
   ["test", "测试与检查"],
   ["build", "构建镜像"],
+  ["preload", "镜像预热"],
   ["migration", "数据库迁移"],
   ["deploy", "启动备用实例"],
   ["health", "健康检查"],
@@ -20,11 +22,15 @@ export const DEPLOYMENT_STEPS = [
   ["observe", "稳定性观察"],
 ] as const;
 
-const ROLLBACK_SKIPPED_STEPS = new Set(["checkout", "test", "build", "migration"]);
+const ROLLBACK_SKIPPED_STEPS = new Set(["checkout", "dependencies", "test", "build", "preload", "migration"]);
 
 export function shouldApplyDeploymentStepEvent(runType: string, step?: string) {
   if (!step) return false;
   return !(runType === "ROLLBACK" && ROLLBACK_SKIPPED_STEPS.has(step));
+}
+
+export function invalidDeploymentText(value: string) {
+  return /\uFFFD|锟斤拷|ï¿½|[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(value);
 }
 
 export type ManifestComponent = {

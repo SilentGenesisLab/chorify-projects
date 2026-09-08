@@ -199,6 +199,21 @@ enum MigrationRisk {
   BREAKING
 }
 
+enum DeploymentNotificationType {
+  DEPLOYMENT_FAILED
+  AUTO_ROLLBACK
+  ENVIRONMENT_DOWN
+  ENVIRONMENT_RECOVERED
+  DEPLOYMENT_SUCCEEDED
+  TEST
+}
+
+enum DeploymentNotificationStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
 model User {
   id                          String                       @id @default(cuid())
   name                        String
@@ -269,18 +284,18 @@ model Team {
 }
 
 model TeamMember {
-  id             String   @id @default(cuid())
-  teamId         String
-  userId         String
-  role           TeamRole @default(MEMBER)
-  joinedAt       DateTime @default(now())
-  displayName    String?
-  title          String?
-  responsibility String?
-  bio            String?
+  id                String            @id @default(cuid())
+  teamId            String
+  userId            String
+  role              TeamRole          @default(MEMBER)
+  joinedAt          DateTime          @default(now())
+  displayName       String?
+  title             String?
+  responsibility    String?
+  bio               String?
   aiUsageVisibility AiUsageVisibility @default(MANAGERS)
-  team           Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team              Team              @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([teamId, userId])
   @@index([userId])
@@ -433,37 +448,39 @@ model SmsCode {
 }
 
 model Project {
-  id                     String                  @id @default(cuid())
-  teamId                 String?
-  code                   String                  @unique
-  name                   String
-  description            String
-  background             String                  @default("")
-  status                 String                  @default("ACTIVE")
-  startDate              DateTime?
-  endDate                DateTime?
-  members                ProjectMember[]
-  requirements           Requirement[]
-  tasks                  Task[]
-  bugs                   Bug[]
-  versions               Version[]
-  milestones             Milestone[]
-  weeklyReviews          ProjectWeeklyReview[]
-  risks                  ProjectRisk[]
-  strategyChanges        ProjectStrategyChange[]
-  auditLogs              AuditLog[]
-  releases               Release[]
-  repositories           ProjectRepository[]
-  deployableServices     DeployableService[]
-  deploymentEnvironments DeploymentEnvironment[]
-  deploymentRuns         DeploymentRun[]
-  files                  FileAsset[]
-  folders                FileFolder[]
-  fileShares             FileShare[]
-  fileUploads            FileUploadSession[]
-  team                   Team?                   @relation(fields: [teamId], references: [id], onDelete: Restrict)
-  createdAt              DateTime                @default(now())
-  updatedAt              DateTime                @updatedAt
+  id                      String                           @id @default(cuid())
+  teamId                  String?
+  code                    String                           @unique
+  name                    String
+  description             String
+  background              String                           @default("")
+  status                  String                           @default("ACTIVE")
+  startDate               DateTime?
+  endDate                 DateTime?
+  members                 ProjectMember[]
+  requirements            Requirement[]
+  tasks                   Task[]
+  bugs                    Bug[]
+  versions                Version[]
+  milestones              Milestone[]
+  weeklyReviews           ProjectWeeklyReview[]
+  risks                   ProjectRisk[]
+  strategyChanges         ProjectStrategyChange[]
+  auditLogs               AuditLog[]
+  releases                Release[]
+  repositories            ProjectRepository[]
+  deployableServices      DeployableService[]
+  deploymentEnvironments  DeploymentEnvironment[]
+  deploymentRuns          DeploymentRun[]
+  deploymentSettings      ProjectDeploymentSettings?
+  deploymentNotifications DeploymentNotificationDelivery[]
+  files                   FileAsset[]
+  folders                 FileFolder[]
+  fileShares              FileShare[]
+  fileUploads             FileUploadSession[]
+  team                    Team?                            @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  createdAt               DateTime                         @default(now())
+  updatedAt               DateTime                         @updatedAt
 
   @@index([teamId])
 }
@@ -851,6 +868,7 @@ model ProjectRepository {
   workflowPath   String                     @default("chorify-deploy.yml")
   status         RepositoryConnectionStatus @default(ACTIVE)
   lastSyncedAt   DateTime?
+  lastError      String?
   project        Project                    @relation(fields: [projectId], references: [id], onDelete: Cascade)
   services       DeployableService[]
   createdAt      DateTime                   @default(now())
@@ -884,26 +902,27 @@ model DeployableService {
 }
 
 model DeploymentEnvironment {
-  id                     String                    @id @default(cuid())
+  id                     String                           @id @default(cuid())
   projectId              String
   name                   String
   slug                   String
   kind                   DeploymentEnvironmentKind
   url                    String
   githubEnvironment      String
-  strategy               DeploymentStrategy        @default(BLUE_GREEN)
-  healthPath             String                    @default("/api/health")
+  strategy               DeploymentStrategy               @default(BLUE_GREEN)
+  healthPath             String                           @default("/api/health")
   activeSlot             String?
   currentDeploymentRunId String?
-  healthStatus           EnvironmentHealthStatus   @default(UNKNOWN)
-  consecutiveFailures    Int                       @default(0)
+  healthStatus           EnvironmentHealthStatus          @default(UNKNOWN)
+  consecutiveFailures    Int                              @default(0)
   lastCheckedAt          DateTime?
-  enabled                Boolean                   @default(true)
-  project                Project                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  enabled                Boolean                          @default(true)
+  project                Project                          @relation(fields: [projectId], references: [id], onDelete: Cascade)
   deploymentRuns         DeploymentRun[]
   healthChecks           EnvironmentHealthCheck[]
-  createdAt              DateTime                  @default(now())
-  updatedAt              DateTime                  @updatedAt
+  notificationDeliveries DeploymentNotificationDelivery[]
+  createdAt              DateTime                         @default(now())
+  updatedAt              DateTime                         @updatedAt
 
   @@unique([projectId, slug])
   @@index([projectId, kind])
@@ -950,41 +969,82 @@ model BuildArtifact {
 }
 
 model DeploymentRun {
-  id               String                   @id @default(cuid())
-  projectId        String
-  versionId        String
-  environmentId    String
-  initiatedById    String
-  rollbackOfId     String?
-  type             DeploymentRunType        @default(DEPLOY)
-  status           DeploymentRunStatus      @default(QUEUED)
-  lockKey          String?                  @unique
-  manifestHash     String
-  migrationRisk    MigrationRisk            @default(NONE)
-  requiresApproval Boolean                  @default(false)
-  githubRunId      String?
-  githubRunUrl     String?
-  failureReason    String?
-  activeSlot       String?
-  previousSlot     String?
-  queuedAt         DateTime                 @default(now())
-  startedAt        DateTime?
-  finishedAt       DateTime?
-  project          Project                  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  version          Version                  @relation(fields: [versionId], references: [id], onDelete: Restrict)
-  environment      DeploymentEnvironment    @relation(fields: [environmentId], references: [id], onDelete: Restrict)
-  initiatedBy      User                     @relation("DeploymentInitiator", fields: [initiatedById], references: [id], onDelete: Restrict)
-  rollbackOf       DeploymentRun?           @relation("DeploymentRollback", fields: [rollbackOfId], references: [id], onDelete: SetNull)
-  rollbacks        DeploymentRun[]          @relation("DeploymentRollback")
-  steps            DeploymentStep[]
-  approvals        DeploymentApproval[]
-  artifacts        BuildArtifact[]
-  healthChecks     EnvironmentHealthCheck[]
-  release          Release?
+  id                     String                           @id @default(cuid())
+  projectId              String
+  versionId              String
+  environmentId          String
+  initiatedById          String
+  rollbackOfId           String?
+  type                   DeploymentRunType                @default(DEPLOY)
+  status                 DeploymentRunStatus              @default(QUEUED)
+  lockKey                String?                          @unique
+  manifestHash           String
+  migrationRisk          MigrationRisk                    @default(NONE)
+  requiresApproval       Boolean                          @default(false)
+  githubRunId            String?
+  githubRunUrl           String?
+  failureReason          String?
+  failureStepKey         String?
+  failureDetails         Json?
+  activeSlot             String?
+  previousSlot           String?
+  queuedAt               DateTime                         @default(now())
+  startedAt              DateTime?
+  finishedAt             DateTime?
+  project                Project                          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  version                Version                          @relation(fields: [versionId], references: [id], onDelete: Restrict)
+  environment            DeploymentEnvironment            @relation(fields: [environmentId], references: [id], onDelete: Restrict)
+  initiatedBy            User                             @relation("DeploymentInitiator", fields: [initiatedById], references: [id], onDelete: Restrict)
+  rollbackOf             DeploymentRun?                   @relation("DeploymentRollback", fields: [rollbackOfId], references: [id], onDelete: SetNull)
+  rollbacks              DeploymentRun[]                  @relation("DeploymentRollback")
+  steps                  DeploymentStep[]
+  approvals              DeploymentApproval[]
+  artifacts              BuildArtifact[]
+  healthChecks           EnvironmentHealthCheck[]
+  notificationDeliveries DeploymentNotificationDelivery[]
+  release                Release?
 
   @@index([projectId, queuedAt])
   @@index([environmentId, status])
   @@index([githubRunId])
+}
+
+model ProjectDeploymentSettings {
+  projectId                 String    @id
+  guideMarkdown             String    @default("")
+  feishuWebhookEncrypted    String?
+  feishuSecretEncrypted     String?
+  feishuEnabled             Boolean   @default(false)
+  notifyDeploymentSucceeded Boolean   @default(false)
+  feishuLastTestedAt        DateTime?
+  feishuLastTestStatus      String?
+  feishuLastError           String?
+  project                   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
+}
+
+model DeploymentNotificationDelivery {
+  id              String                       @id @default(cuid())
+  projectId       String
+  environmentId   String?
+  deploymentRunId String?
+  eventKey        String                       @unique
+  type            DeploymentNotificationType
+  status          DeploymentNotificationStatus @default(PENDING)
+  payload         Json
+  attempts        Int                          @default(0)
+  nextAttemptAt   DateTime                     @default(now())
+  lastError       String?
+  sentAt          DateTime?
+  project         Project                      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  environment     DeploymentEnvironment?       @relation(fields: [environmentId], references: [id], onDelete: SetNull)
+  deploymentRun   DeploymentRun?               @relation(fields: [deploymentRunId], references: [id], onDelete: SetNull)
+  createdAt       DateTime                     @default(now())
+  updatedAt       DateTime                     @updatedAt
+
+  @@index([status, nextAttemptAt])
+  @@index([projectId, createdAt])
 }
 
 model DeploymentStep {

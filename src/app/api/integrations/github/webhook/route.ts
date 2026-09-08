@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verifyWebhookSignature } from "@/lib/deployment";
-import { failDeployment } from "@/lib/deployment-run";
+import { failDeployment, reconcileGithubFailure } from "@/lib/deployment-run";
 
 type WorkflowRunEvent = {
   action?: string;
@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
   if (workflow.status === "in_progress") {
     await prisma.deploymentRun.update({ where: { id: run.id }, data: { status: run.status === "DISPATCHED" ? "BUILDING" : run.status, githubRunId, githubRunUrl: workflow.html_url, startedAt: run.startedAt || new Date() } });
   } else if (workflow.status === "completed" && workflow.conclusion && workflow.conclusion !== "success") {
-    await failDeployment(run.id, `GitHub Actions ${workflow.conclusion}`);
+    await reconcileGithubFailure(run.id, githubRunId).catch(() => failDeployment(run.id, `GitHub Actions ${workflow.conclusion}`));
     await prisma.deploymentRun.update({ where: { id: run.id }, data: { githubRunId, githubRunUrl: workflow.html_url } });
   } else if (workflow.status === "completed" && workflow.conclusion === "success" && !["SUCCEEDED", "ROLLED_BACK"].includes(run.status)) {
     await prisma.deploymentRun.update({ where: { id: run.id }, data: { status: "VERIFYING", githubRunId, githubRunUrl: workflow.html_url } });

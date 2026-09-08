@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createPersonalToken, createTeamInviteToken, decryptTeamInviteToken, encryptTeamInviteToken, sha256 } from "./security";
+import { createPersonalToken, createTeamInviteToken, decryptAppSecret, decryptTeamInviteToken, encryptAppSecret, encryptTeamInviteToken, sha256 } from "./security";
 
 describe("personal API token", () => {
   it("creates a display-once token and stable hash", () => {
@@ -26,5 +26,14 @@ describe("team invitation token", () => {
     expect(encrypted).not.toContain(token);
     expect(decryptTeamInviteToken(encrypted, "test-secret-at-least-32-characters")).toBe(token);
     expect(decryptTeamInviteToken(encrypted, "wrong-secret-at-least-32-characters")).toBeNull();
+  });
+});
+
+describe("application secret encryption", () => {
+  it("isolates encrypted values by purpose", () => {
+    const encrypted = encryptAppSecret("https://open.feishu.cn/hook/secret", "feishu-webhook", "test-secret-at-least-32-characters");
+    expect(encrypted).not.toContain("open.feishu.cn");
+    expect(decryptAppSecret(encrypted, "feishu-webhook", "test-secret-at-least-32-characters")).toContain("open.feishu.cn");
+    expect(decryptAppSecret(encrypted, "other", "test-secret-at-least-32-characters")).toBeNull();
   });
 });

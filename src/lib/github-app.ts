@@ -108,10 +108,66 @@ export async function githubRun(owner: string, repository: string, installationI
   }>(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}/actions/runs/${encodeURIComponent(runId)}`, token);
 }
 
+export type GithubRunDiagnostic = {
+  failedStepName: string | null;
+  failureStepKey: string | null;
+  conclusion: string | null;
+  annotation: string | null;
+  exitCode: number | null;
+  steps: Array<{ name: string; conclusion: string | null; key: string | null }>;
+};
+
+function internalStepKey(name: string) {
+  if (/checkout|notify pipeline/i.test(name)) return "checkout";
+  if (/install dependencies/i.test(name)) return "dependencies";
+  if (/test|lint|type check/i.test(name)) return "test";
+  if (/build application|build and push/i.test(name)) return "build";
+  if (/preload image/i.test(name)) return "preload";
+  if (/migration compatibility/i.test(name)) return "migration";
+  if (/deploy inactive/i.test(name)) return "deploy";
+  return null;
+}
+
+export async function githubRunDiagnostics(owner: string, repository: string, installationId: string, runId: string): Promise<GithubRunDiagnostic> {
+  const token = await installationToken(installationId);
+  const result = await request<{ jobs: Array<{ id: number; conclusion: string | null; steps?: Array<{ name: string; conclusion: string | null }> }> }>(
+    `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}/actions/runs/${encodeURIComponent(runId)}/jobs`, token,
+  );
+  const steps = result.jobs.flatMap((job) => job.steps || []).map((step) => ({ ...step, key: internalStepKey(step.name) }));
+  const failed = steps.find((step) => step.conclusion === "failure") || null;
+  const failedJob = result.jobs.find((job) => job.conclusion === "failure");
+  let annotation: string | null = null;
+  if (failedJob) {
+    const annotations = await request<Array<{ annotation_level?: string; message?: string }>>(
+      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}/check-runs/${failedJob.id}/annotations`, token,
+    ).catch(() => []);
+    annotation = annotations.find((item) => item.annotation_level === "failure")?.message || null;
+  }
+  const exitCode = annotation?.match(/exit code\s+(\d+)/i)?.[1];
+  return {
+    failedStepName: failed?.name || null,
+    failureStepKey: failed?.key || null,
+    conclusion: failed?.conclusion || failedJob?.conclusion || null,
+    annotation,
+    exitCode: exitCode ? Number(exitCode) : null,
+    steps,
+  };
+}
+
 export async function resolveCommit(owner: string, repository: string, installationId: string, ref: string) {
   const token = await installationToken(installationId);
   return request<{ sha: string; html_url: string; commit: { message: string } }>(
     `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}/commits/${encodeURIComponent(ref)}`,
     token,
   );
+}
+
+export async function githubFileExists(owner: string, repository: string, installationId: string, path: string, ref: string) {
+  const token = await installationToken(installationId);
+  try {
+    await request(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}/contents/${path.split("/").map(encodeURIComponent).join("/")}?ref=${encodeURIComponent(ref)}`, token);
+    return true;
+  } catch {
+    return false;
+  }
 }
