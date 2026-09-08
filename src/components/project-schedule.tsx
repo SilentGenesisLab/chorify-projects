@@ -39,6 +39,7 @@ export function ProjectSchedule({ projectId, highlightedWeek }: { projectId: str
   const [statusFilter,setStatusFilter]=useState("ALL"),[ownerFilter,setOwnerFilter]=useState("ALL");
   const [drag, setDrag] = useState<Drag | null>(null), [editor, setEditor] = useState<Row | null>(null), [detail, setDetail] = useState<ScheduleRequirement | null>(null);
   const dragged = useRef(false);
+  const [listWidth,setListWidth]=useState(320),listResize=useRef<{x:number;width:number}|null>(null);
   const period = useMemo(() => schedulePeriod(anchor, zoom), [anchor, zoom]);
   const config = { ...zooms[zoom], days: period.days }, end = period.end;
   const load = useCallback(async () => {
@@ -77,6 +78,7 @@ export function ProjectSchedule({ projectId, highlightedWeek }: { projectId: str
     event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId); dragged.current = false;
     setDrag({ id: row.item.id, kind: row.kind, mode, originX: event.clientX, delta: 0 });
   }
+  function resizeList(event:ReactPointerEvent<HTMLButtonElement>){if(!listResize.current)return;setListWidth(Math.min(560,Math.max(280,listResize.current.width+event.clientX-listResize.current.x)))}
   function moveDrag(event: ReactPointerEvent) { if (drag) { const delta=Math.round((event.clientX-drag.originX)/config.cell);if(delta)dragged.current=true;setDrag({...drag,delta}); } }
   async function finishDrag(row: Row) {
     if (!drag || drag.id !== row.item.id || !row.item.plannedStartAt || !row.item.dueAt) return setDrag(null);
@@ -112,8 +114,8 @@ export function ProjectSchedule({ projectId, highlightedWeek }: { projectId: str
     </div>
     {error&&<div role="alert" className="border-b border-rose-100 bg-rose-50 px-5 py-3 text-sm text-rose-700">{error}</div>}
     <div className="overflow-x-auto">
-      <div className="grid min-w-max" style={{ gridTemplateColumns: `320px ${width}px` }}>
-        <div className="sticky left-0 z-30 border-b border-r border-slate-200 bg-slate-50 px-4 py-4 text-xs font-semibold text-slate-500">工作项 / 负责人 / 状态</div>
+      <div className="grid min-w-max" style={{ gridTemplateColumns: `${listWidth}px ${width}px` }}>
+        <div className="sticky left-0 z-30 flex items-center border-b border-r border-slate-200 bg-slate-50 px-4 py-4 text-xs font-semibold text-slate-500">工作项 / 负责人 / 状态<button type="button" aria-label="调整工作项列表宽度" title="左右拖动调整列表宽度" className="absolute inset-y-0 right-0 w-2 cursor-col-resize touch-none hover:bg-blue-500/20" onPointerDown={event=>{listResize.current={x:event.clientX,width:listWidth};event.currentTarget.setPointerCapture(event.pointerId)}} onPointerMove={resizeList} onPointerUp={()=>{listResize.current=null}}/></div>
         <div className="relative border-b border-slate-200 bg-slate-50" style={{ width }}>
           <div className="relative h-7 border-b border-slate-200">{months.map(item=><span key={`${item.text}-${item.start}`} className="absolute top-1 text-xs font-semibold text-slate-500" style={{left:item.start*config.cell+6}}>{item.text}</span>)}</div>
           <div className="flex h-9">{days.map(day=><div key={key(day)} style={{width:config.cell}} className={`shrink-0 border-r border-slate-200/70 pt-1 text-center text-[10px] ${weekday(day)===0||weekday(day)===6?"bg-slate-100":""}`}><span className={key(day)===key(new Date())?"rounded-full bg-blue-600 px-1.5 py-1 text-white":"text-slate-400"}>{dayNumber(day)}</span>{zoom!=="quarter"&&<div className="mt-1 text-[9px] text-slate-300">{["日","一","二","三","四","五","六"][weekday(day)]}</div>}</div>)}</div>
@@ -123,16 +125,16 @@ export function ProjectSchedule({ projectId, highlightedWeek }: { projectId: str
           const left=start===null?0:Math.max(0,start)*config.cell, right=due===null?0:Math.min(config.days-1,due), barWidth=start===null||due===null?0:Math.max(config.cell*.7,(right-Math.max(0,start)+1)*config.cell);
           const req=row.kind==="requirement"?row.item as ScheduleRequirement:null;
           return <div className="contents" key={`${row.kind}-${row.item.id}`}>
-            <button onClick={()=>req?setDetail(req):setEditor(row)} className={`sticky left-0 z-20 flex h-14 items-center border-b border-r border-slate-100 bg-white px-3 text-left hover:bg-blue-50/40 ${row.depth?"pl-9":""}`}>
+            <button onClick={()=>req?setDetail(req):setEditor(row)} className={`sticky left-0 z-20 flex min-h-14 items-center border-b border-r border-slate-100 bg-white px-3 py-3 text-left hover:bg-blue-50/40 ${row.depth?"pl-9":""}`}>
               {req&&<span onClick={event=>{event.stopPropagation();setExpanded(value=>{const next=new Set(value);if(next.has(req.id))next.delete(req.id);else next.add(req.id);return next;})}} className="mr-1 rounded p-1 hover:bg-slate-100">{expanded.has(req.id)?<ChevronDown size={14}/>:<ChevronRight size={14}/>}</span>}
-              {row.kind==="task"&&<GripVertical size={13} className="mr-2 text-slate-300"/>}<span className="min-w-0"><span className="block max-w-44 truncate text-xs font-medium">{row.item.code} · {row.item.title}</span><span className="mt-1 flex items-center gap-1.5 text-[10px] text-slate-400"><span>{row.kind==="requirement"?(row.item as ScheduleRequirement).requester?.name||"未指定提出者":(row.item as ScheduleTask).assignee?.name||"未分配"}</span><span>·</span><span>{statusLabels[row.item.status]||row.item.status}</span>{row.item.plannedDays&&<><span>·</span><span>{row.item.plannedDays}天</span></>}</span></span>
+              {row.kind==="task"&&<GripVertical size={13} className="mr-2 shrink-0 text-slate-300"/>}<span className="min-w-0 flex-1"><span className="block whitespace-normal break-words text-xs font-medium leading-5">{row.item.code} · {row.item.title}</span><span className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[10px] text-slate-400"><span>{row.kind==="requirement"?(row.item as ScheduleRequirement).requester?.name||"未指定提出者":(row.item as ScheduleTask).assignee?.name||"未分配"}</span><span>·</span><span>{statusLabels[row.item.status]||row.item.status}</span>{row.item.plannedDays&&<><span>·</span><span>{row.item.plannedDays}天</span></>}</span></span>
               <span className={`ml-auto shrink-0 rounded-full px-2 py-1 text-[10px] ${healthClass[row.item.health]||healthClass.UNSCHEDULED}`}>{healthLabels[row.item.health]||row.item.health}</span>
             </button>
-            <div className="relative h-14 overflow-hidden border-b border-slate-100" style={{width}} onPointerMove={moveDrag} onPointerUp={()=>void finishDrag(row)}>
+            <div className="relative min-h-14 overflow-hidden border-b border-slate-100" style={{width}} onPointerMove={moveDrag} onPointerUp={()=>void finishDrag(row)}>
               <Grid days={days} cell={config.cell}/>{highlightLeft<width&&highlightLeft+7*config.cell>0&&<div className="absolute inset-y-0 bg-blue-50/60" style={{left:Math.max(0,highlightLeft),width:Math.min(width-Math.max(0,highlightLeft),7*config.cell)}}/>}{todayLeft>=0&&todayLeft<width&&<div className="absolute inset-y-0 z-10 w-px bg-blue-500" style={{left:todayLeft+config.cell/2}}/>}
-              {start!==null&&due!==null?<div title={req?"点击查看需求，拖动调整排期":"拖动调整排期，拖动两端改变起止日期"} className={`absolute top-3 z-20 flex h-8 items-center overflow-hidden rounded-lg text-[10px] text-white shadow-sm ${row.kind==="requirement"?"cursor-pointer bg-blue-600":"bg-sky-500"} ${row.item.health==="OVERDUE"?"bg-rose-500":row.item.health==="AT_RISK"?"bg-amber-500":""}`} style={{left,width:barWidth}} onPointerDown={event=>beginDrag(event,row,"move")} onClick={()=>{if(req&&!dragged.current)setDetail(req);dragged.current=false}}>
+              {start!==null&&due!==null?<div title={req?"点击查看需求，拖动调整排期":"拖动调整排期，拖动两端改变起止日期"} className={`absolute top-1/2 z-20 flex h-8 -translate-y-1/2 items-center overflow-hidden rounded-lg text-[10px] text-white shadow-sm ${row.kind==="requirement"?"cursor-pointer bg-blue-600":"bg-sky-500"} ${row.item.health==="OVERDUE"?"bg-rose-500":row.item.health==="AT_RISK"?"bg-amber-500":""}`} style={{left,width:barWidth}} onPointerDown={event=>beginDrag(event,row,"move")} onClick={()=>{if(req&&!dragged.current)setDetail(req);dragged.current=false}}>
                 {data?.permissions.canWrite&&<span className="absolute inset-y-0 left-0 w-2 cursor-ew-resize bg-black/10" onPointerDown={event=>{event.stopPropagation();beginDrag(event,row,"start")}}/>}<span className="truncate px-3">{req?.progress!==null&&req?.progress!==undefined?`${req.progress}%`:statusLabels[row.item.status]||row.item.status}</span>{(row.item as ScheduleTask).dependencyConflict&&<AlertTriangle size={13} className="ml-auto mr-2 shrink-0"/>}{data?.permissions.canWrite&&<span className="absolute inset-y-0 right-0 w-2 cursor-ew-resize bg-black/10" onPointerDown={event=>{event.stopPropagation();beginDrag(event,row,"end")}}/>}
-              </div>:<button onClick={()=>setEditor(row)} className="absolute left-3 top-4 z-20 text-[11px] text-slate-400 hover:text-blue-600">+ 设置排期</button>}
+              </div>:<button onClick={()=>setEditor(row)} className="absolute left-3 top-1/2 z-20 -translate-y-1/2 text-[11px] text-slate-400 hover:text-blue-600">+ 设置排期</button>}
             </div>
           </div>})}
       </div>
