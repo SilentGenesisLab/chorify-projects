@@ -30,7 +30,7 @@ async function request<T>(path: string, token: string, init: RequestInit = {}) {
     ...init,
     headers: {
       Accept: "application/vnd.github+json",
-      Authorization: `Bearer ${token}`,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       "X-GitHub-Api-Version": "2022-11-28",
       "Content-Type": "application/json",
       ...init.headers,
@@ -155,7 +155,7 @@ export async function githubRunDiagnostics(owner: string, repository: string, in
 }
 
 export async function resolveCommit(owner: string, repository: string, installationId: string, ref: string) {
-  const token = await installationToken(installationId);
+  const token = await installationToken(installationId).catch(() => "");
   return request<{ sha: string; html_url: string; commit: { message: string; author: { name: string; date: string } } }>(
     `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}/commits/${encodeURIComponent(ref)}`,
     token,
