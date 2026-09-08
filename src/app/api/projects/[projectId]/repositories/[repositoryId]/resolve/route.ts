@@ -14,7 +14,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const ref = request.nextUrl.searchParams.get("ref") || repository.defaultBranch;
   try {
     const commit = await resolveCommit(repository.owner, repository.name, repository.installationId, ref);
-    return NextResponse.json({ sha: commit.sha, url: commit.html_url, message: commit.commit.message, ref });
+    return NextResponse.json({ sha: commit.sha, url: commit.html_url, message: commit.commit.message, author: commit.commit.author.name, committedAt: commit.commit.author.date, ref });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "无法读取 GitHub commit" }, { status: 502 });
   }

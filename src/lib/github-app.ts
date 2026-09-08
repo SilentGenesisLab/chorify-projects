@@ -156,7 +156,7 @@ export async function githubRunDiagnostics(owner: string, repository: string, in
 
 export async function resolveCommit(owner: string, repository: string, installationId: string, ref: string) {
   const token = await installationToken(installationId);
-  return request<{ sha: string; html_url: string; commit: { message: string } }>(
+  return request<{ sha: string; html_url: string; commit: { message: string; author: { name: string; date: string } } }>(
     `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}/commits/${encodeURIComponent(ref)}`,
     token,
   );

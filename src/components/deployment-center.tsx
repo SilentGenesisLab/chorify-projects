@@ -29,7 +29,8 @@ import {
 import { SelectField } from "@/components/ui/select-field";
 
 type Item = Record<string, unknown> & { id: string };
-type Step = { id: string; key: string; name: string; status: string; logsUrl?: string | null };
+type Step = { id: string; key: string; name: string; status: string; logsUrl?: string | null; output?: unknown; startedAt?: string | null; finishedAt?: string | null };
+type CommitDetails = { message: string; author?: string | null; committedAt?: string | null; url?: string | null };
 type Run = Item & {
   status: string;
   type: string;
@@ -43,11 +44,11 @@ type Run = Item & {
   version: { id: string; name: string };
   environment: Environment;
   steps: Step[];
-  artifacts: Array<{ id: string; commitSha: string; imageRef: string; imageDigest?: string | null; service: { name: string; slug: string } }>;
+  artifacts: Array<{ id: string; commitSha: string; commitMessage?: string | null; commitAuthor?: string | null; commitCommittedAt?: string | null; commitUrl?: string | null; imageRef: string; imageDigest?: string | null; service: { name: string; slug: string } }>;
 };
 type Service = { id: string; name: string; slug: string; healthPath: string; repository: { id: string; fullName: string; defaultBranch: string } };
 type Environment = { id: string; projectId: string; name: string; slug: string; kind: string; url: string; enabled?: boolean; healthStatus: string; lastCheckedAt?: string | null; activeSlot?: string | null; uptime24h?: number | null; uptime7d?: number | null; recentChecks?: Array<{ id: string; status: string; latencyMs?: number | null }> };
-type Version = Item & { name: string; status: string; goal: string; plannedAt?: string | null; components: Array<{ id: string; commitSha: string; branch?: string | null; service: { id: string; name: string; slug: string } }>; _count: { requirements: number; tasks: number; fixedBugs: number } };
+type Version = Item & { name: string; status: string; goal: string; plannedAt?: string | null; components: Array<{ id: string; commitSha: string; commitMessage?: string | null; commitAuthor?: string | null; commitCommittedAt?: string | null; commitUrl?: string | null; branch?: string | null; service: { id: string; name: string; slug: string } }>; _count: { requirements: number; tasks: number; fixedBugs: number } };
 type Release = Item & { build: string; environment: string; status: string; releasedAt?: string | null; isLegacy: boolean; version: { name: string }; deploymentRunId?: string | null; imageSummary?: Record<string, { ref: string; digest: string }> | null };
 type CenterData = { currentUserId: string; repositories: Item[]; services: Service[]; environments: Environment[]; versions: Version[]; runs: Run[]; releases: Release[]; permissions: { canDeploy: boolean; canConfigure: boolean }; activeStatuses: string[] };
 type ConfigData = { repositories: Array<Record<string, unknown> & { id: string; owner: string; name: string; installationId: string; defaultBranch: string; workflowPath: string; status: string; lastError?: string | null }>; services: Array<Record<string, unknown> & { id: string; repositoryId: string; name: string; slug: string; kind: string; dockerfilePath: string; buildContext: string; healthPath: string; internalPort: number; enabled: boolean; repository: { id: string; fullName: string } }>; environments: Array<Environment & { githubEnvironment: string; healthPath: string; enabled: boolean }>; readiness: Array<{ id: string; title: string; status: string; detail: string }>; guideMarkdown: string; requiredSecrets: string[]; feishu: { configured: boolean; enabled: boolean; notifyDeploymentSucceeded: boolean; lastTestedAt?: string | null; lastTestStatus?: string | null; lastError?: string | null }; permissions: { canConfigure: boolean } };
@@ -152,6 +153,7 @@ function VersionPanel({ data, onEdit, onRelease }: { data: CenterData; onEdit: (
 
 function PipelinePanel({ data, reload, notify }: { data: CenterData; reload: (quiet?: boolean) => Promise<void>; notify: Notify }) {
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [logRun, setLogRun] = useState<Run | null>(null);
   if (!data.runs.length) return <Empty text="还没有流水线运行记录"/>;
   async function retry(run: Run) {
     const response = await fetch(`/api/projects/${run.environment.projectId}/deployments/${run.id}/retry`, { method: "POST" });
@@ -161,10 +163,10 @@ function PipelinePanel({ data, reload, notify }: { data: CenterData; reload: (qu
     await reload();
   }
   return <div className="space-y-3">{data.runs.map((run) => <section key={run.id} className={`card overflow-hidden ${run.status === "FAILED" ? "border-rose-200" : ""}`}>
-    <div className="flex flex-col gap-3 border-b border-slate-100 p-4 sm:flex-row sm:items-center"><RunIcon status={run.status}/><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h4 className="font-medium">{run.type === "ROLLBACK" ? "回滚" : "发布"} {run.version.name}</h4><Status value={run.status}/><span className="text-xs text-slate-400">{run.environment.name}</span></div><p className="mt-1 text-xs text-slate-400">{run.initiatedBy.name} · {fmt(run.queuedAt)}{run.artifacts[0] ? ` · ${shortSha(run.artifacts[0].commitSha)}` : ""}</p></div>{run.status === "WAITING_APPROVAL" && data.permissions.canDeploy && (run.initiatedBy.id === data.currentUserId ? <span className="text-xs text-amber-600">等待另一位管理员审批</span> : <button onClick={() => void approve(data, run, reload, notify)} className="primary-button"><ShieldCheck size={15}/>审批发布</button>)}{run.githubRunUrl && <a href={run.githubRunUrl} target="_blank" rel="noreferrer" className="secondary-button">Actions <ExternalLink size={14}/></a>}</div>
+    <div className="flex flex-col gap-3 border-b border-slate-100 p-4 sm:flex-row sm:items-center"><RunIcon status={run.status}/><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h4 className="font-medium">{run.type === "ROLLBACK" ? "回滚" : "发布"} {run.version.name}</h4><Status value={run.status}/><span className="text-xs text-slate-400">{run.environment.name}</span></div><p className="mt-1 text-xs text-slate-400">{run.initiatedBy.name} · {fmt(run.queuedAt)}{run.artifacts[0] ? ` · ${shortSha(run.artifacts[0].commitSha)}` : ""}</p>{run.artifacts[0]?.commitMessage && <p className="mt-1 truncate text-xs text-slate-600">{firstLine(run.artifacts[0].commitMessage)}</p>}</div>{run.status === "WAITING_APPROVAL" && data.permissions.canDeploy && (run.initiatedBy.id === data.currentUserId ? <span className="text-xs text-amber-600">等待另一位管理员审批</span> : <button onClick={() => void approve(data, run, reload, notify)} className="primary-button"><ShieldCheck size={15}/>审批发布</button>)}<button onClick={() => setLogRun(run)} className="secondary-button">查看日志</button>{run.githubRunUrl && <a href={run.githubRunUrl} target="_blank" rel="noreferrer" className="secondary-button">Actions <ExternalLink size={14}/></a>}</div>
     <div className="grid gap-2 p-4 sm:grid-cols-5 lg:grid-cols-10">{run.steps.length ? run.steps.map((step) => <div key={step.id} className={`rounded-xl p-3 ${step.status === "FAILED" ? "bg-rose-50 ring-1 ring-rose-100" : "bg-slate-50"}`}><div className="flex items-center gap-2"><StepIcon status={step.status}/><span className="text-xs font-medium">{step.name}</span></div><p className="mt-2 text-[11px] text-slate-400">{labels[step.status] || step.status}</p></div>) : <p className="col-span-full text-sm text-slate-400">{run.status === "WAITING_APPROVAL" ? "审批通过后开始执行" : "正在等待 GitHub Actions 接收任务"}</p>}</div>
     {run.failureReason && <div className="border-t border-rose-100 bg-rose-50 px-4 py-3 text-sm text-rose-700"><div className="flex flex-col gap-3 sm:flex-row sm:items-center"><AlertTriangle size={17} className="shrink-0"/><div className="flex-1"><b>{run.failureReason}</b><p className="mt-1 text-xs text-rose-600">{run.failureDetails?.annotation || "流水线没有返回更多诊断信息，请查看 GitHub Actions 日志。"}</p></div><button onClick={() => setDetailId(detailId === run.id ? null : run.id)} className="secondary-button">{detailId === run.id ? "收起详情" : "排查详情"}</button>{data.permissions.canDeploy && run.type === "DEPLOY" && <button onClick={() => void retry(run)} className="secondary-button"><RefreshCw size={14}/>按原提交重试</button>}</div>{detailId === run.id && <div className="mt-3 rounded-xl border border-rose-100 bg-white/70 p-3 text-xs leading-6 text-slate-600"><p>失败阶段：{run.failureStepKey ? run.steps.find((step) => step.key === run.failureStepKey)?.name || run.failureStepKey : "未识别"}</p><p>错误码：{run.failureDetails?.exitCode ?? "—"}</p><p>完成时间：{fmt(run.finishedAt)}</p>{run.githubRunUrl && <a href={run.githubRunUrl} target="_blank" rel="noreferrer" className="font-medium text-blue-600">打开完整 Actions 日志</a>}</div>}</div>}
-  </section>)}</div>;
+  </section>)}{logRun && <DeploymentDetailModal run={logRun} onClose={() => setLogRun(null)}/>}</div>;
 }
 
 async function approve(data: CenterData, run: Run, reload: (quiet?: boolean) => Promise<void>, notify: Notify) {
@@ -176,8 +178,9 @@ async function approve(data: CenterData, run: Run, reload: (quiet?: boolean) => 
 }
 
 function ReleasePanel({ data, reload, notify }: { data: CenterData; reload: (quiet?: boolean) => Promise<void>; notify: Notify }) {
+  const [selectedRun, setSelectedRun] = useState<Run | null>(null);
   if (!data.releases.length) return <Empty text="还没有正式发布记录"/>;
-  return <section className="card divide-y divide-slate-100 overflow-hidden">{data.releases.map((release) => <div key={release.id} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center"><ShieldCheck size={18} className={release.status === "SUCCEEDED" ? "text-emerald-600" : "text-slate-400"}/><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><p className="text-sm font-medium">{release.version.name} · {release.environment}</p><Status value={release.status}/>{release.isLegacy && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500">历史人工记录</span>}</div><p className="mt-1 text-xs text-slate-400">构建 {release.build} · {fmt(release.releasedAt)}</p></div>{data.permissions.canDeploy && release.status === "SUCCEEDED" && release.deploymentRunId && <button onClick={() => void rollback(release, data, reload, notify)} className="secondary-button"><RotateCcw size={14}/>回滚到此版本</button>}</div>)}</section>;
+  return <><section className="card divide-y divide-slate-100 overflow-hidden">{data.releases.map((release) => { const run = data.runs.find((item) => item.id === release.deploymentRunId); return <div key={release.id} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center"><ShieldCheck size={18} className={release.status === "SUCCEEDED" ? "text-emerald-600" : "text-slate-400"}/><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><p className="text-sm font-medium">{release.version.name} · {release.environment}</p><Status value={release.status}/>{release.isLegacy && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500">历史人工记录</span>}</div><p className="mt-1 text-xs text-slate-400">构建 {release.build} · {fmt(release.releasedAt)}{run?.artifacts[0] ? ` · ${shortSha(run.artifacts[0].commitSha)}` : ""}</p>{run?.artifacts[0]?.commitMessage && <p className="mt-1 truncate text-xs text-slate-600">{firstLine(run.artifacts[0].commitMessage)}</p>}</div>{run && <button onClick={() => setSelectedRun(run)} className="secondary-button">查看详情</button>}{data.permissions.canDeploy && release.status === "SUCCEEDED" && release.deploymentRunId && <button onClick={() => void rollback(release, data, reload, notify)} className="secondary-button"><RotateCcw size={14}/>回滚到此版本</button>}</div>; })}</section>{selectedRun && <DeploymentDetailModal run={selectedRun} onClose={() => setSelectedRun(null)}/>}</>;
 }
 
 async function rollback(release: Release, data: CenterData, reload: (quiet?: boolean) => Promise<void>, notify: Notify) {
@@ -187,6 +190,41 @@ async function rollback(release: Release, data: CenterData, reload: (quiet?: boo
   if (!response.ok) return notify((await response.json()).error || "回滚发起失败", "error");
   notify("回滚任务已创建", "success");
   await reload();
+}
+
+function DeploymentDetailModal({ run, onClose }: { run: Run; onClose: () => void }) {
+  return <Modal wide title={`${run.version.name} · 发布详情`} subtitle={`${run.environment.name} · ${labels[run.status] || run.status} · ${fmt(run.queuedAt)}`} onClose={onClose}>
+    <div className="grid min-h-[36rem] lg:grid-cols-[20rem_1fr]">
+      <aside className="border-b border-slate-100 bg-slate-50/60 p-5 lg:border-b-0 lg:border-r">
+        <p className="text-xs font-medium uppercase tracking-wider text-slate-400">代码版本</p>
+        <div className="mt-3 space-y-3">{run.artifacts.map((artifact) => <div key={artifact.id} className="rounded-xl border border-slate-200 bg-white p-3">
+          <p className="text-sm font-medium text-slate-700">{artifact.service.name}</p>
+          <div className="mt-2 flex items-center gap-2 font-mono text-xs text-blue-600"><GitCommitHorizontal size={14}/>{shortSha(artifact.commitSha)}</div>
+          <p className="mt-2 text-sm leading-5 text-slate-700">{artifact.commitMessage ? firstLine(artifact.commitMessage) : "历史记录暂无提交描述"}</p>
+          {artifact.commitMessage && artifact.commitMessage.includes("\n") && <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-slate-500">{artifact.commitMessage.slice(artifact.commitMessage.indexOf("\n") + 1).trim()}</p>}
+          <p className="mt-2 text-xs text-slate-400">{artifact.commitAuthor || "未知作者"} · {fmt(artifact.commitCommittedAt)}</p>
+          {artifact.commitUrl && <a href={artifact.commitUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-blue-600">查看 commit <ExternalLink size={12}/></a>}
+        </div>)}</div>
+        {!run.artifacts.length && <p className="mt-3 text-sm text-slate-400">尚未生成构建制品</p>}
+        <div className="mt-5 space-y-1 text-xs leading-6 text-slate-500"><p>发起人：{run.initiatedBy.name}</p><p>开始：{fmt(run.queuedAt)}</p><p>完成：{fmt(run.finishedAt)}</p></div>
+      </aside>
+      <div className="p-5">
+        <div className="flex items-center justify-between"><div><h4 className="font-semibold">流水线日志</h4><p className="mt-1 text-xs text-slate-400">展示各阶段状态、时间和工作流回传的结构化输出</p></div>{run.githubRunUrl && <a href={run.githubRunUrl} target="_blank" rel="noreferrer" className="secondary-button">完整 Actions 日志 <ExternalLink size={14}/></a>}</div>
+        <div className="mt-5 space-y-3">{run.steps.map((step, index) => <details key={step.id} open={step.status === "FAILED"} className={`rounded-xl border ${step.status === "FAILED" ? "border-rose-200 bg-rose-50/40" : "border-slate-200 bg-white"}`}>
+          <summary className="flex cursor-pointer list-none items-center gap-3 p-4"><span className="grid size-6 place-items-center rounded-lg bg-slate-50 text-[11px] text-slate-500">{index + 1}</span><StepIcon status={step.status}/><span className="text-sm font-medium">{step.name}</span><Status value={step.status}/><span className="ml-auto text-xs text-slate-400">{step.finishedAt ? fmt(step.finishedAt) : step.startedAt ? `开始于 ${fmt(step.startedAt)}` : "—"}</span><ChevronRight size={15} className="text-slate-300"/></summary>
+          <div className="border-t border-slate-100 px-4 py-3"><pre className="max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-slate-950 p-3 font-mono text-xs leading-5 text-slate-200">{formatStepOutput(step.output)}</pre>{step.logsUrl && <a href={step.logsUrl} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-blue-600">打开该步骤外部日志 <ExternalLink size={12}/></a>}</div>
+        </details>)}</div>
+        {!run.steps.length && <div className="mt-5 rounded-xl bg-slate-50 p-8 text-center text-sm text-slate-400">流水线尚未开始，暂无步骤日志</div>}
+      </div>
+    </div>
+  </Modal>;
+}
+
+function firstLine(message: string) { return message.split(/\r?\n/, 1)[0] || "无提交描述"; }
+function formatStepOutput(output: unknown) {
+  if (output == null) return "该步骤暂未回传结构化日志。可通过 Actions 查看原始执行日志。";
+  if (typeof output === "string") return output;
+  try { return JSON.stringify(output, null, 2); } catch { return String(output); }
 }
 
 function EnvironmentPanel({ projectId, data, reload, notify, onConfigure }: { projectId: string; data: CenterData; reload: (quiet?: boolean) => Promise<void>; notify: Notify; onConfigure: () => void }) {
@@ -207,6 +245,7 @@ function EnvironmentPanel({ projectId, data, reload, notify, onConfigure }: { pr
 function ReleaseDialog({ projectId, version, data, onClose, onSaved }: { projectId: string; version: Version; data: CenterData; onClose: () => void; onSaved: () => void }) {
   const [environmentId, setEnvironmentId] = useState(data.environments[0]?.id || "");
   const [commits, setCommits] = useState<Record<string, string>>(() => Object.fromEntries(data.services.map((service) => [service.id, version.components.find((item) => item.service.id === service.id)?.commitSha || ""])));
+  const [commitDetails, setCommitDetails] = useState<Record<string, CommitDetails>>(() => Object.fromEntries(version.components.filter((item) => item.commitMessage).map((item) => [item.service.id, { message: item.commitMessage!, author: item.commitAuthor, committedAt: item.commitCommittedAt, url: item.commitUrl }])));
   const [saving, setSaving] = useState(false), [error, setError] = useState("");
   const environment = data.environments.find((item) => item.id === environmentId);
   async function resolve(service: Service) {
@@ -214,6 +253,7 @@ function ReleaseDialog({ projectId, version, data, onClose, onSaved }: { project
     const body = await response.json();
     if (!response.ok) return setError(body.error || "获取 commit 失败");
     setCommits((value) => ({ ...value, [service.id]: body.sha }));
+    setCommitDetails((value) => ({ ...value, [service.id]: { message: body.message, author: body.author, committedAt: body.committedAt, url: body.url } }));
   }
   async function submit() {
     setSaving(true); setError("");
@@ -222,7 +262,7 @@ function ReleaseDialog({ projectId, version, data, onClose, onSaved }: { project
     if (!response.ok) return setError(body.error || "发布失败");
     onSaved();
   }
-  return <Modal title={`发布 ${version.name}`} subtitle="发布内容会锁定到精确 commit，执行后不可修改" onClose={onClose}><div className="space-y-5"><SelectField label="目标环境" value={environmentId} onChange={setEnvironmentId} options={data.environments.map((item) => ({ value: item.id, label: `${item.name} · ${labels[item.kind]}` }))}/><div><p className="mb-2 text-sm font-medium">服务与代码版本</p><div className="space-y-3">{data.services.map((service) => <label key={service.id} className="block rounded-xl border border-slate-200 p-3"><span className="flex items-center justify-between text-xs text-slate-500"><span>{service.name} · {service.repository.fullName}</span><button type="button" onClick={() => void resolve(service)} className="text-blue-600 hover:text-blue-700">获取 {service.repository.defaultBranch} 最新提交</button></span><div className="mt-2 flex items-center gap-2"><GitCommitHorizontal size={15} className="text-slate-400"/><input value={commits[service.id] || ""} onChange={(event) => setCommits((value) => ({ ...value, [service.id]: event.target.value.trim() }))} placeholder="完整40位 commit SHA" className="min-w-0 flex-1 bg-transparent font-mono text-sm outline-none"/></div></label>)}</div></div>{environment?.kind === "PRODUCTION" && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-700">生产发布提交后需要另一位项目管理员审批，发起人不能自审。</div>}{error && <p className="text-sm text-rose-600">{error}</p>}<div className="flex justify-end gap-2"><button onClick={onClose} className="secondary-button">取消</button><button onClick={() => void submit()} disabled={saving || !environmentId || data.services.some((service) => !/^[a-f0-9]{40}$/i.test(commits[service.id] || ""))} className="primary-button disabled:opacity-40">{saving ? <LoaderCircle size={15} className="animate-spin"/> : <Play size={15}/>} {environment?.kind === "PRODUCTION" ? "提交审批" : "确认发布"}</button></div></div></Modal>;
+  return <Modal title={`发布 ${version.name}`} subtitle="发布内容会锁定到精确 commit，执行后不可修改" onClose={onClose}><div className="space-y-5"><SelectField label="目标环境" value={environmentId} onChange={setEnvironmentId} options={data.environments.map((item) => ({ value: item.id, label: `${item.name} · ${labels[item.kind]}` }))}/><div><p className="mb-2 text-sm font-medium">服务与代码版本</p><div className="space-y-3">{data.services.map((service) => { const details = commitDetails[service.id]; return <label key={service.id} className="block rounded-xl border border-slate-200 p-3"><span className="flex items-center justify-between text-xs text-slate-500"><span>{service.name} · {service.repository.fullName}</span><button type="button" onClick={() => void resolve(service)} className="text-blue-600 hover:text-blue-700">获取 {service.repository.defaultBranch} 最新提交</button></span><div className="mt-2 flex items-center gap-2"><GitCommitHorizontal size={15} className="text-slate-400"/><input value={commits[service.id] || ""} onChange={(event) => { setCommits((value) => ({ ...value, [service.id]: event.target.value.trim() })); setCommitDetails((value) => { const next = { ...value }; delete next[service.id]; return next; }); }} placeholder="完整40位 commit SHA" className="min-w-0 flex-1 bg-transparent font-mono text-sm outline-none"/></div>{details && <div className="mt-3 rounded-lg bg-slate-50 px-3 py-2"><p className="text-sm font-medium text-slate-700">{firstLine(details.message)}</p><p className="mt-1 text-xs text-slate-400">{details.author || "未知作者"} · {fmt(details.committedAt)}</p></div>}</label>; })}</div></div>{environment?.kind === "PRODUCTION" && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-700">生产发布提交后需要另一位项目管理员审批，发起人不能自审。</div>}{error && <p className="text-sm text-rose-600">{error}</p>}<div className="flex justify-end gap-2"><button onClick={onClose} className="secondary-button">取消</button><button onClick={() => void submit()} disabled={saving || !environmentId || data.services.some((service) => !/^[a-f0-9]{40}$/i.test(commits[service.id] || ""))} className="primary-button disabled:opacity-40">{saving ? <LoaderCircle size={15} className="animate-spin"/> : <Play size={15}/>} {environment?.kind === "PRODUCTION" ? "提交审批" : "确认发布"}</button></div></div></Modal>;
 }
 
 function ConfigDialog({ projectId, notify, onClose, onSaved }: { projectId: string; notify: Notify; onClose: () => void; onSaved: () => void }) {

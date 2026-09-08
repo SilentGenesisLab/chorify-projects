@@ -929,16 +929,20 @@ model DeploymentEnvironment {
 }
 
 model VersionComponent {
-  id        String            @id @default(cuid())
-  versionId String
-  serviceId String
-  commitSha String
-  branch    String?
-  version   Version           @relation(fields: [versionId], references: [id], onDelete: Cascade)
-  service   DeployableService @relation(fields: [serviceId], references: [id], onDelete: Restrict)
-  artifacts BuildArtifact[]
-  createdAt DateTime          @default(now())
-  updatedAt DateTime          @updatedAt
+  id                String            @id @default(cuid())
+  versionId         String
+  serviceId         String
+  commitSha         String
+  commitMessage     String?
+  commitAuthor      String?
+  commitCommittedAt DateTime?
+  commitUrl         String?
+  branch            String?
+  version           Version           @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  service           DeployableService @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  artifacts         BuildArtifact[]
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
 
   @@unique([versionId, serviceId])
   @@index([serviceId, commitSha])
@@ -951,6 +955,10 @@ model BuildArtifact {
   serviceId          String
   deploymentRunId    String
   commitSha          String
+  commitMessage      String?
+  commitAuthor       String?
+  commitCommittedAt  DateTime?
+  commitUrl          String?
   imageRef           String
   imageDigest        String?
   status             BuildArtifactStatus @default(BUILDING)

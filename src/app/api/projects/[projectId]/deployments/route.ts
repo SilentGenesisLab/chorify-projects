@@ -6,6 +6,7 @@ import { getProjectAccess } from "@/lib/project-permissions";
 import { getRequestUserId } from "@/lib/team-permissions";
 import { deploymentManifestHash } from "@/lib/deployment";
 import { deploymentInclude, dispatchDeploymentRun } from "@/lib/deployment-run";
+import { resolveCommit } from "@/lib/github-app";
 
 const schema = z.object({
   versionId: z.string().min(1),
@@ -40,6 +41,24 @@ export async function POST(
   if (services.length !== new Set(parsed.data.components.map((item) => item.serviceId)).size)
     return NextResponse.json({ error: "包含无效或未启用的部署服务" }, { status: 400 });
 
+  let resolvedCommits;
+  try {
+    resolvedCommits = await Promise.all(parsed.data.components.map(async (component) => {
+      const service = services.find((item) => item.id === component.serviceId)!;
+      const commit = await resolveCommit(service.repository.owner, service.repository.name, service.repository.installationId, component.commitSha);
+      if (commit.sha.toLowerCase() !== component.commitSha.toLowerCase()) throw new Error(`${service.name} 的 commit 校验结果不一致`);
+      return {
+        serviceId: component.serviceId,
+        commitMessage: commit.commit.message,
+        commitAuthor: commit.commit.author.name,
+        commitCommittedAt: new Date(commit.commit.author.date),
+        commitUrl: commit.html_url,
+      };
+    }));
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? `无法读取 commit 信息：${error.message}` : "无法读取 commit 信息" }, { status: 502 });
+  }
+
   const components = parsed.data.components.map((component) => {
     const service = services.find((item) => item.id === component.serviceId)!;
     return { serviceId: service.id, service: service.name, repository: service.repository.fullName, commitSha: component.commitSha, branch: component.branch };
@@ -50,10 +69,11 @@ export async function POST(
   try {
     run = await prisma.$transaction(async (tx) => {
       for (const component of parsed.data.components) {
+        const commitDetails = resolvedCommits.find((item) => item.serviceId === component.serviceId)!;
         await tx.versionComponent.upsert({
           where: { versionId_serviceId: { versionId: version.id, serviceId: component.serviceId } },
-          create: { versionId: version.id, ...component },
-          update: { commitSha: component.commitSha.toLowerCase(), branch: component.branch },
+          create: { versionId: version.id, ...component, ...commitDetails },
+          update: { commitSha: component.commitSha.toLowerCase(), branch: component.branch, ...commitDetails },
         });
       }
       const created = await tx.deploymentRun.create({

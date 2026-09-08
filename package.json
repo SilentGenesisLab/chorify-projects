@@ -12,7 +12,8 @@
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
-    "audit:deployment-encoding": "tsx scripts/audit-deployment-encoding.ts"
+    "audit:deployment-encoding": "tsx scripts/audit-deployment-encoding.ts",
+    "backfill:deployment-commits": "tsx scripts/backfill-deployment-commits.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
