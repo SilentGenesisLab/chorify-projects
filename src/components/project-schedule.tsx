@@ -108,7 +108,7 @@ export function ProjectSchedule({ projectId, highlightedWeek }: { projectId: str
       </div>
     </header>
     <div className="border-b border-slate-100 p-4">
-      <SchedulePeriodControl anchor={period.start} zoom={zoom} onPrevious={()=>setAnchor(shiftSchedulePeriod(period.start,zoom,-1))} onToday={()=>setAnchor(schedulePeriod(new Date(),zoom).start)} onNext={()=>setAnchor(shiftSchedulePeriod(period.start,zoom,1))} onZoom={value=>{setZoom(value);setAnchor(schedulePeriod(period.start,value).start)}}/>
+      <SchedulePeriodControl anchor={period.start} zoom={zoom} onPrevious={()=>setAnchor(shiftSchedulePeriod(period.start,zoom,-1))} onToday={()=>setAnchor(schedulePeriod(new Date(),zoom).start)} onNext={()=>setAnchor(shiftSchedulePeriod(period.start,zoom,1))} onZoom={value=>{const now=new Date(),focus=now>=period.start&&now<period.end?now:period.start;setZoom(value);setAnchor(schedulePeriod(focus,value).start)}}/>
     </div>
     {error&&<div role="alert" className="border-b border-rose-100 bg-rose-50 px-5 py-3 text-sm text-rose-700">{error}</div>}
     <div className="overflow-x-auto">
